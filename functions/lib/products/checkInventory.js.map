@@ -1,0 +1,1 @@
+{"version":3,"file":"checkInventory.js","sourceRoot":"","sources":["../../src/products/checkInventory.ts"],"names":[],"mappings":";;;AAAA,gDAAgD;AAEnC,QAAA,cAAc,GAAG,SAAS,CAAC,KAAK,CAAC,MAAM,CAAC,KAAK,EAAE,IAAS,EAAE,OAAY,EAAE,EAAE;IACrF,wCAAwC;IACxC,OAAO,EAAE,MAAM,EAAE,SAAS,EAAE,OAAO,EAAE,uBAAuB,EAAE,CAAC;AACjE,CAAC,CAAC,CAAC"}

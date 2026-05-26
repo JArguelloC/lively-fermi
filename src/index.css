@@ -1,0 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Fondos */
+    --groove-bg-primary: #0A0A0A;
+    --groove-bg-secondary: #141414;
+
+    /* Acentos */
+    --groove-gold: #D4AF37;
+    --groove-gold-light: #E8C670;
+    --groove-purple: #6B2D8C;
+
+    /* Texto */
+    --groove-text-primary: #F5F0E8;
+    --groove-text-secondary: #A8A8A8;
+  }
+
+  body {
+    @apply bg-groove-bg-primary text-groove-text-primary font-body antialiased;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display tracking-tight text-groove-text-primary;
+  }
+}
+
+@layer utilities {
+  .text-gradient-gold {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-groove-gold-light to-groove-gold;
+  }
+  
+  .bg-gradient-gold {
+    @apply bg-gradient-to-r from-groove-gold-light to-groove-gold;
+  }
+
+  .glass-card {
+    @apply bg-groove-bg-secondary/80 backdrop-blur-md border border-white/5;
+  }
+}
+
+/* Custom scrollbar matching dark theme */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--groove-bg-primary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--groove-bg-secondary);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--groove-purple);
+}

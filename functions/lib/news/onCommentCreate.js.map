@@ -1,0 +1,1 @@
+{"version":3,"file":"onCommentCreate.js","sourceRoot":"","sources":["../../src/news/onCommentCreate.ts"],"names":[],"mappings":";;;AAAA,gDAAgD;AAEnC,QAAA,eAAe,GAAG,SAAS,CAAC,SAAS;KAC/C,QAAQ,CAAC,oCAAoC,CAAC;KAC9C,QAAQ,CAAC,KAAK,EAAE,IAAS,EAAE,OAAY,EAAE,EAAE;IAC1C,yCAAyC;IACzC,OAAO,IAAI,CAAC;AACd,CAAC,CAAC,CAAC"}
