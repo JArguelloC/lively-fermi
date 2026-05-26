@@ -88,7 +88,7 @@ function App() {
   }, [])
 
   return (
-    <PayPalScriptProvider options={{ "clientId": "test", currency: "USD", components: "buttons" }}>
+    <PayPalScriptProvider options={{ "client-id": "test", currency: "USD", components: "buttons" }}>
       <BrowserRouter>
         <ScrollToTop />
         <div className="flex flex-col min-h-screen">
