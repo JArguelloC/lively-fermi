@@ -1,27 +1,32 @@
 /**
  * CHECKOUT PAGE - Flujo completo de compra
- * 
+ *
  * CARACTERÍSTICAS:
- * ✅ Envío dinámico: >$50 = FREE, ≤$50 = $5.99
- * ✅ Mapbox Ecuador-only (countries="ec")
- * ✅ CAPA 2 (validación) + CAPA 3 (decremento atómico)
- * ✅ Cart purge en Firebase después de éxito
- * ✅ Forma de usuario específico: 5AIaouE4Eler4l4nZEpZBq6qHB43
+ * - Envío dinámico: >$50 = GRATIS, ≤$50 = $5.99
+ * - Mapbox Ecuador-only (countries="ec")
+ * - Validación de tarjeta en tiempo real (número/Luhn, MM/AA, CVC/CVV)
+ * - El pedido se crea vía API REST; el backend valida y descuenta stock de forma atómica
  */
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { CreditCard, MapPin, Check, Lock, ArrowRight, ArrowLeft, ShieldCheck, ShoppingCart, AlertCircle } from 'lucide-react'
+import { CreditCard, MapPin, Check, Lock, ArrowRight, ArrowLeft, ShoppingCart, AlertCircle, CheckCircle2 } from 'lucide-react'
 import SEOMeta from '../../components/ui/SEOMeta'
 import MapboxGeocoderComponent from '../../components/ecommerce/MapboxGeocoder'
-import { formatPrice } from '../../data/mockData'
 import { useCartStore } from '../../store/cartStore'
 import { useAuthStore } from '../../store/authStore'
 import { PayPalScriptProvider, PayPalButtons } from '@paypal/react-paypal-js'
-import { validateOrderStock, decrementProductStock } from '../../services/stockService'
-import { auth, db } from '../../services/firebase'
-import { deleteDoc, doc } from 'firebase/firestore'
+import { createOrder, type CreateOrderInput } from '../../services/api'
+import {
+  formatCardNumber,
+  formatExpiry,
+  detectCardType,
+  validateCardNumber,
+  validateExpiry,
+  validateCVC,
+  validateCardName,
+} from '../../utils/cardValidation'
 
 const steps = ['Envío', 'Pago', 'Confirmar']
 
@@ -48,7 +53,7 @@ export default function Checkout() {
   // FORM STATE - Datos de envío Ecuador
   // ═══════════════════════════════════════════════════════════════
   const [shippingData, setShippingData] = useState<ShippingFormData>({
-    name: currentUser?.displayName || '',
+    name: currentUser?.nombre || '',
     email: currentUser?.email || '',
     phone: '',
     address: '',
@@ -56,6 +61,50 @@ export default function Checkout() {
     zip: '',
     province: '' // Ej: Pichincha, Guayas, Manabí
   })
+
+  // ═══════════════════════════════════════════════════════════════
+  // FORM STATE - Datos de la tarjeta (validación en tiempo real)
+  // ═══════════════════════════════════════════════════════════════
+  const [cardData, setCardData] = useState({ number: '', name: '', expiry: '', cvc: '' })
+  const [cardTouched, setCardTouched] = useState({ number: false, name: false, expiry: false, cvc: false })
+
+  const cardType = useMemo(() => detectCardType(cardData.number), [cardData.number])
+
+  const cardErrors = useMemo(
+    () => ({
+      number: validateCardNumber(cardData.number),
+      name: validateCardName(cardData.name),
+      expiry: validateExpiry(cardData.expiry),
+      cvc: validateCVC(cardData.cvc, cardType.type),
+    }),
+    [cardData, cardType.type]
+  )
+
+  const isCardValid = !cardErrors.number && !cardErrors.name && !cardErrors.expiry && !cardErrors.cvc
+
+  // Estado visual de cada campo: idle (neutro), valid (verde) o invalid (rojo).
+  const cardFieldState = (field: keyof typeof cardData): 'idle' | 'valid' | 'invalid' => {
+    const hasValue = cardData[field].length > 0
+    const showError = cardTouched[field] || hasValue
+    if (showError && cardErrors[field]) return 'invalid'
+    if (hasValue && !cardErrors[field]) return 'valid'
+    return 'idle'
+  }
+
+  const cardBorderClass = (field: keyof typeof cardData): string => {
+    const state = cardFieldState(field)
+    if (state === 'invalid') return 'border-red-500 focus:border-red-500'
+    if (state === 'valid') return 'border-green-500 focus:border-green-500'
+    return 'border-groove-gold/30 focus:border-groove-gold'
+  }
+
+  const handleCardChange = (field: keyof typeof cardData, raw: string) => {
+    let value = raw
+    if (field === 'number') value = formatCardNumber(raw)
+    else if (field === 'expiry') value = formatExpiry(raw)
+    else if (field === 'cvc') value = raw.replace(/\D/g, '').slice(0, cardType.cvcLength)
+    setCardData((prev) => ({ ...prev, [field]: value }))
+  }
 
   // ═══════════════════════════════════════════════════════════════
   // CÁLCULO DE ENVÍO DINÁMICO
@@ -83,126 +132,83 @@ export default function Checkout() {
   }
 
   // ═══════════════════════════════════════════════════════════════
+  // Construir el payload del pedido para la API REST
+  // ═══════════════════════════════════════════════════════════════
+  const buildOrderInput = (metodoPago: string, paymentIntentId?: string): CreateOrderInput => ({
+    items: cartItems.map(item => ({
+      productId: item.productId,
+      variantId: item.variantId,
+      quantity: item.quantity,
+      name: item.name,
+    })),
+    shipping: {
+      fullName: shippingData.name,
+      addressLine1: shippingData.address,
+      city: shippingData.city,
+      state: shippingData.province,
+      postalCode: shippingData.zip,
+      country: 'Ecuador',
+    },
+    paymentMethod: metodoPago,
+    paymentIntentId,
+  })
+
+  // ═══════════════════════════════════════════════════════════════
   // HANDLER: Pago con Tarjeta
   // ═══════════════════════════════════════════════════════════════
   const handleCardPayment = async () => {
+    // Marca todos los campos como tocados para mostrar errores pendientes
+    setCardTouched({ number: true, name: true, expiry: true, cvc: true })
+    if (!isCardValid) return
+
     setIsProcessing(true)
     setStockError('')
 
     try {
-      // CAPA 2: Validar stock de todos los items ANTES de procesar pago
-      console.log('🔍 CAPA 2: Validando stock...')
-      const stockValidation = await validateOrderStock(cartItems)
-
-      if (!stockValidation.valid) {
-        setStockError(stockValidation.errors.join(' | '))
-        setIsProcessing(false)
-        return
-      }
-
       // Simular procesamiento de pago (2 segundos)
-      console.log('💳 Procesando pago con tarjeta...')
       await new Promise(resolve => setTimeout(resolve, 2000))
 
-      // CAPA 3: Decrementar stock de forma ATÓMICA
-      console.log('⚙️  CAPA 3: Actualizando inventario (transacción atómica)...')
-      const stockDecrement = await decrementProductStock(cartItems)
+      // El backend valida el stock y lo decrementa de forma atómica
+      const pedido = await createOrder(buildOrderInput('card'))
 
-      if (!stockDecrement.success) {
-        setStockError(stockDecrement.message || 'Error al actualizar el inventario.')
-        setIsProcessing(false)
-        return
-      }
-
-      // ✅ PAGO EXITOSO + STOCK DECREMENTADO
-      const orderId = `ORD-${Math.floor(Math.random() * 10000)}`
       try {
-        localStorage.setItem('lastOrderId', orderId)
+        localStorage.setItem('lastOrderId', pedido.id)
         localStorage.setItem('lastPayer', shippingData.name)
       } catch (e) {
         console.error('Error saving order to localStorage:', e)
       }
 
-      // Limpiar carrito LOCALMENTE
       await clearCart()
-
-      // 🗑️ PURGAR CARRITO EN FIREBASE
-      const user = auth.currentUser
-      if (user) {
-        try {
-          await deleteDoc(doc(db, 'carts', user.uid))
-          console.log(`✅ Carrito purgado en Firestore para usuario ${user.uid}`)
-        } catch (deleteError) {
-          console.error('⚠️  No se pudo eliminar carrito de Firestore:', deleteError)
-          // No es bloqueante - la orden ya está completada
-        }
-      }
-
       navigate('/order-confirmation')
     } catch (error) {
-      console.error('❌ Error en pago con tarjeta:', error)
-      setStockError('Error procesando el pago. Por favor, intenta de nuevo.')
+      const msg = error instanceof Error ? error.message : 'Error procesando el pago. Por favor, intenta de nuevo.'
+      console.error('Error en pago con tarjeta:', error)
+      setStockError(msg)
       setIsProcessing(false)
     }
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // HANDLER: Pago con PayPal
+  // HANDLER: Pago con PayPal (tras capturar la orden)
   // ═══════════════════════════════════════════════════════════════
-  const handlePayPalApprove = async (data: any, actions: any) => {
+  const finishPayPalOrder = async (paymentIntentId: string | undefined, payerName: string) => {
     try {
-      // CAPA 2: Validar stock ANTES de procesar PayPal
-      console.log('🔍 CAPA 2: Validando stock con PayPal...')
-      const stockValidation = await validateOrderStock(cartItems)
+      // El backend valida el stock y lo decrementa de forma atómica
+      const pedido = await createOrder(buildOrderInput('paypal', paymentIntentId))
 
-      if (!stockValidation.valid) {
-        setStockError(stockValidation.errors.join(' | '))
-        return
+      try {
+        localStorage.setItem('lastOrderId', pedido.id)
+        localStorage.setItem('lastPayer', payerName || shippingData.name || 'Cliente')
+      } catch (e) {
+        console.error('Error saving PayPal order:', e)
       }
 
-      return actions.order.capture().then(async (details: any) => {
-        try {
-          // CAPA 3: Decrementar stock de forma ATÓMICA
-          console.log('⚙️  CAPA 3: Actualizando inventario (transacción atómica)...')
-          const stockDecrement = await decrementProductStock(cartItems)
-
-          if (!stockDecrement.success) {
-            setStockError(stockDecrement.message || 'Error al actualizar el inventario.')
-            return
-          }
-
-          // ✅ PAGO EXITOSO + STOCK DECREMENTADO
-          const payerName = details.payer?.name?.given_name || 'Cliente'
-          try {
-            localStorage.setItem('lastOrderId', details.id)
-            localStorage.setItem('lastPayer', payerName)
-          } catch (e) {
-            console.error('Error saving PayPal order:', e)
-          }
-
-          // Limpiar carrito LOCALMENTE
-          await clearCart()
-
-          // 🗑️ PURGAR CARRITO EN FIREBASE
-          const user = auth.currentUser
-          if (user) {
-            try {
-              await deleteDoc(doc(db, 'carts', user.uid))
-              console.log(`✅ Carrito purgado en Firestore para usuario ${user.uid}`)
-            } catch (deleteError) {
-              console.error('⚠️  No se pudo eliminar carrito de Firestore:', deleteError)
-            }
-          }
-
-          navigate('/order-confirmation')
-        } catch (error) {
-          console.error('❌ Error en aprobación PayPal:', error)
-          setStockError('Error procesando la compra. Por favor, intenta de nuevo.')
-        }
-      })
+      await clearCart()
+      navigate('/order-confirmation')
     } catch (error) {
-      console.error('❌ Error con PayPal:', error)
-      setStockError('Error con PayPal. Por favor, intenta de nuevo.')
+      const msg = error instanceof Error ? error.message : 'Error con PayPal. Por favor, intenta de nuevo.'
+      console.error('Error con PayPal:', error)
+      setStockError(msg)
     }
   }
 
@@ -413,13 +419,141 @@ export default function Checkout() {
                   {/* Método seleccionado */}
                   <AnimatePresence>
                     {paymentMethod === 'card' && (
-                      <motion.button
-                        onClick={handleCardPayment}
-                        disabled={isProcessing}
-                        className="w-full bg-groove-gold text-black font-bold py-3 rounded-lg hover:bg-groove-gold-light disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="space-y-4 overflow-hidden"
                       >
-                        {isProcessing ? '⏳ Procesando...' : <>Pagar ${(total / 100).toFixed(2)}</>}
-                      </motion.button>
+                        {/* Datos de la tarjeta con validación en tiempo real */}
+                        <div>
+                          <label htmlFor="card-number" className="block text-sm font-semibold mb-1">
+                            Número de tarjeta
+                          </label>
+                          <div className="relative">
+                            <input
+                              id="card-number"
+                              type="text"
+                              inputMode="numeric"
+                              autoComplete="cc-number"
+                              placeholder="1234 5678 9012 3456"
+                              value={cardData.number}
+                              onChange={(e) => handleCardChange('number', e.target.value)}
+                              onBlur={() => setCardTouched((p) => ({ ...p, number: true }))}
+                              aria-invalid={cardFieldState('number') === 'invalid'}
+                              className={`w-full bg-groove-bg-primary border rounded-lg px-4 py-3 pr-24 focus:outline-none transition-colors ${cardBorderClass('number')}`}
+                            />
+                            <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                              {cardType.label && (
+                                <span className="text-xs font-semibold text-groove-text-secondary">{cardType.label}</span>
+                              )}
+                              {cardFieldState('number') === 'valid' && <CheckCircle2 className="w-4 h-4 text-green-500" />}
+                              {cardFieldState('number') === 'invalid' && <AlertCircle className="w-4 h-4 text-red-500" />}
+                            </div>
+                          </div>
+                          {cardFieldState('number') === 'invalid' && (
+                            <p className="text-xs text-red-400 mt-1 flex items-center gap-1">
+                              <AlertCircle className="w-3 h-3" /> {cardErrors.number}
+                            </p>
+                          )}
+                        </div>
+
+                        <div>
+                          <label htmlFor="card-name" className="block text-sm font-semibold mb-1">
+                            Nombre del titular
+                          </label>
+                          <div className="relative">
+                            <input
+                              id="card-name"
+                              type="text"
+                              autoComplete="cc-name"
+                              placeholder="Como aparece en la tarjeta"
+                              value={cardData.name}
+                              onChange={(e) => handleCardChange('name', e.target.value)}
+                              onBlur={() => setCardTouched((p) => ({ ...p, name: true }))}
+                              aria-invalid={cardFieldState('name') === 'invalid'}
+                              className={`w-full bg-groove-bg-primary border rounded-lg px-4 py-3 pr-10 focus:outline-none transition-colors ${cardBorderClass('name')}`}
+                            />
+                            <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                              {cardFieldState('name') === 'valid' && <CheckCircle2 className="w-4 h-4 text-green-500" />}
+                              {cardFieldState('name') === 'invalid' && <AlertCircle className="w-4 h-4 text-red-500" />}
+                            </div>
+                          </div>
+                          {cardFieldState('name') === 'invalid' && (
+                            <p className="text-xs text-red-400 mt-1 flex items-center gap-1">
+                              <AlertCircle className="w-3 h-3" /> {cardErrors.name}
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label htmlFor="card-expiry" className="block text-sm font-semibold mb-1">
+                              Expiración (MM/AA)
+                            </label>
+                            <div className="relative">
+                              <input
+                                id="card-expiry"
+                                type="text"
+                                inputMode="numeric"
+                                autoComplete="cc-exp"
+                                placeholder="MM/AA"
+                                value={cardData.expiry}
+                                onChange={(e) => handleCardChange('expiry', e.target.value)}
+                                onBlur={() => setCardTouched((p) => ({ ...p, expiry: true }))}
+                                aria-invalid={cardFieldState('expiry') === 'invalid'}
+                                className={`w-full bg-groove-bg-primary border rounded-lg px-4 py-3 pr-10 focus:outline-none transition-colors ${cardBorderClass('expiry')}`}
+                              />
+                              <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                                {cardFieldState('expiry') === 'valid' && <CheckCircle2 className="w-4 h-4 text-green-500" />}
+                                {cardFieldState('expiry') === 'invalid' && <AlertCircle className="w-4 h-4 text-red-500" />}
+                              </div>
+                            </div>
+                            {cardFieldState('expiry') === 'invalid' && (
+                              <p className="text-xs text-red-400 mt-1 flex items-center gap-1">
+                                <AlertCircle className="w-3 h-3" /> {cardErrors.expiry}
+                              </p>
+                            )}
+                          </div>
+
+                          <div>
+                            <label htmlFor="card-cvc" className="block text-sm font-semibold mb-1">
+                              {cardType.type === 'amex' ? 'CVV (4 dígitos)' : 'CVC/CVV'}
+                            </label>
+                            <div className="relative">
+                              <input
+                                id="card-cvc"
+                                type="text"
+                                inputMode="numeric"
+                                autoComplete="cc-csc"
+                                placeholder={cardType.type === 'amex' ? '1234' : '123'}
+                                value={cardData.cvc}
+                                onChange={(e) => handleCardChange('cvc', e.target.value)}
+                                onBlur={() => setCardTouched((p) => ({ ...p, cvc: true }))}
+                                aria-invalid={cardFieldState('cvc') === 'invalid'}
+                                className={`w-full bg-groove-bg-primary border rounded-lg px-4 py-3 pr-10 focus:outline-none transition-colors ${cardBorderClass('cvc')}`}
+                              />
+                              <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                                {cardFieldState('cvc') === 'valid' && <CheckCircle2 className="w-4 h-4 text-green-500" />}
+                                {cardFieldState('cvc') === 'invalid' && <AlertCircle className="w-4 h-4 text-red-500" />}
+                              </div>
+                            </div>
+                            {cardFieldState('cvc') === 'invalid' && (
+                              <p className="text-xs text-red-400 mt-1 flex items-center gap-1">
+                                <AlertCircle className="w-3 h-3" /> {cardErrors.cvc}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={handleCardPayment}
+                          disabled={isProcessing || !isCardValid}
+                          className="w-full bg-groove-gold text-black font-bold py-3 rounded-lg hover:bg-groove-gold-light disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+                        >
+                          {isProcessing ? '⏳ Procesando...' : <>Pagar ${(total / 100).toFixed(2)}</>}
+                        </button>
+                      </motion.div>
                     )}
                     {paymentMethod === 'paypal' && (
                       <PayPalButtons
@@ -429,7 +563,11 @@ export default function Checkout() {
                             purchase_units: [{ amount: { currency_code: 'USD', value: (total / 100).toString() } }]
                           })
                         }}
-                        onApprove={handlePayPalApprove}
+                        onApprove={async (_data, actions) => {
+                          const details = await actions.order!.capture()
+                          const payerName = details?.payer?.name?.given_name || ''
+                          await finishPayPalOrder(details?.id, payerName)
+                        }}
                       />
                     )}
                   </AnimatePresence>

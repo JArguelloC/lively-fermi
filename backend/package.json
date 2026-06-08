@@ -1,7 +1,7 @@
 {
-  "name": "barbox-backend",
+  "name": "groove-backend",
   "version": "1.0.0",
-  "description": "API REST para sistema de gestión de licorería online",
+  "description": "API REST (Express + Prisma) para la tienda de música Groove",
   "type": "module",
   "main": "src/app.js",
   "engines": {
@@ -11,8 +11,13 @@
     "build": "prisma generate",
     "start": "node start.js",
     "dev": "node start.js",
-    "test": "node --test",
-    "test:smoke": "node tests/run-tests.js"
+    "db:migrate": "prisma migrate deploy",
+    "db:seed": "node prisma/seed.js",
+    "test": "node --test tests/*.test.js",
+    "test:smoke": "node --test tests/health.test.js"
+  },
+  "prisma": {
+    "seed": "node prisma/seed.js"
   },
   "dependencies": {
     "@prisma/client": "^6.19.0",

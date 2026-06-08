@@ -1,68 +1,29 @@
 /**
- * ARTICLE DETAIL - Detalle de Noticia con Comentarios Persistentes
- * 
- * CARACTERÍSTICAS:
- * ✅ Carga artículo desde Firestore
- * ✅ Comentarios persistentes (userId, nombre, contenido, timestamp)
- * ✅ Solo usuarios autenticados pueden comentar
- * ✅ Comentarios se guardan en subcarpeta del artículo
- * ✅ Reactividad en tiempo real
+ * ARTICLE DETAIL - Detalle de Noticia con Comentarios
+ * Datos servidos por la API REST de Groove (Express + Prisma).
  */
 
 import { useState, useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Heart, MessageSquare, Share2, ShoppingCart, ArrowRight, ChevronRight, CheckCircle, Send } from 'lucide-react'
-import { useCartStore } from '../../store/cartStore'
+import { Heart, MessageSquare, Share2, ChevronRight, Send } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
-import { db } from '../../services/firebase'
+import { getArticleBySlug, postComment } from '../../services/api'
 import { getNewsCoverImage, NEWS_FALLBACK_IMAGE } from '../../utils/newsImage'
 import SEOMeta from '../../components/ui/SEOMeta'
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  updateDoc,
-  doc,
-  arrayUnion,
-  onSnapshot,
-  Timestamp,
-  DocumentData
-} from 'firebase/firestore'
+import type { MockArticle, MockComment } from '../../data/mockData'
 
-interface Comment {
-  id: string
-  userId: string
-  authorName: string
-  content: string
-  createdAt: Timestamp | Date | string
-}
-
-interface Article extends DocumentData {
-  id: string
-  title: string
-  slug: string
-  excerpt: string
-  content: string
-  author: string
-  authorId: string
-  category: string
-  tags: string[]
-  coverImage?: string
-  createdAt: Timestamp | Date | string
-  viewCount?: number
-  comments?: Comment[]
-}
+type Comment = MockComment
+type Article = MockArticle
 
 /**
  * Formatear fecha
  */
-function formatDate(date: Timestamp | Date | string | undefined): string {
+function formatDate(date: Date | string | undefined): string {
   if (!date) return ''
-  
+
   try {
-    const d = date instanceof Timestamp ? date.toDate() : new Date(date as string | number)
+    const d = new Date(date)
     return d.toLocaleDateString('es-ES', {
       year: 'numeric',
       month: 'long',
@@ -76,11 +37,11 @@ function formatDate(date: Timestamp | Date | string | undefined): string {
 /**
  * Formato de tiempo relativo
  */
-function timeAgo(date: Timestamp | Date | string | undefined): string {
+function timeAgo(date: Date | string | undefined): string {
   if (!date) return ''
-  
+
   try {
-    const d = date instanceof Timestamp ? date.toDate() : new Date(date as string | number)
+    const d = new Date(date)
     const now = new Date()
     const seconds = Math.floor((now.getTime() - d.getTime()) / 1000)
 
@@ -99,7 +60,6 @@ export default function ArticleDetail() {
   const { slug } = useParams<{ slug: string }>()
   const navigate = useNavigate()
   const { currentUser, isAuthenticated } = useAuthStore()
-  const { addItem } = useCartStore()
 
   // State
   const [article, setArticle] = useState<Article | null>(null)
@@ -109,49 +69,31 @@ export default function ArticleDetail() {
   const [isSubmittingComment, setIsSubmittingComment] = useState(false)
   const [error, setError] = useState('')
 
-  // Cargar artículo desde Firestore
+  // Cargar artículo desde la API REST
   useEffect(() => {
     if (!slug) return
-
-    let unsubscribeFn: (() => void) | null = null
+    let cancelled = false
 
     const loadArticle = async () => {
       try {
         setIsLoadingArticle(true)
-        const newsRef = collection(db, 'news')
-        const q = query(newsRef, where('slug', '==', slug))
-        const snapshot = await getDocs(q)
-
-        if (snapshot.empty) {
-          setError('Artículo no encontrado')
-          return
-        }
-
-        const doc = snapshot.docs[0]
-        const articleData = { id: doc.id, ...doc.data() } as Article
-        setArticle(articleData)
-        setComments(articleData.comments || [])
-
-        // Suscribirse a cambios en tiempo real y guardar la función de limpieza
-        unsubscribeFn = onSnapshot(doc.ref, updatedDoc => {
-          const updated = { id: updatedDoc.id, ...updatedDoc.data() } as Article
-          setArticle(updated)
-          setComments(updated.comments || [])
-        })
+        const { article: data, comments: list } = await getArticleBySlug(slug)
+        if (cancelled) return
+        setArticle(data)
+        setComments(list)
       } catch (err) {
+        if (cancelled) return
         console.error('Error cargando artículo:', err)
-        setError('Error cargando el artículo')
+        setError('Artículo no encontrado')
       } finally {
-        setIsLoadingArticle(false)
+        if (!cancelled) setIsLoadingArticle(false)
       }
     }
 
     loadArticle()
 
     return () => {
-      if (typeof unsubscribeFn === 'function') {
-        try { unsubscribeFn() } catch (e) { /* ignore */ }
-      }
+      cancelled = true
     }
   }, [slug])
 
@@ -164,28 +106,12 @@ export default function ArticleDetail() {
       return
     }
 
-    if (!newCommentContent.trim()) return
-
-    if (!article) return
+    if (!newCommentContent.trim() || !article || !slug) return
 
     try {
       setIsSubmittingComment(true)
-
-      const newComment: Comment = {
-        id: `comment-${Date.now()}`,
-        userId: currentUser.uid,
-        authorName: currentUser.displayName || 'Anónimo',
-        content: newCommentContent.trim(),
-        createdAt: Timestamp.now()
-      }
-
-      // Actualizar artículo agregando comentario
-      const articleRef = doc(db, 'news', article.id)
-      await updateDoc(articleRef, {
-        comments: arrayUnion(newComment)
-      })
-
-      console.log('✅ Comentario agregado')
+      const nuevo = await postComment(slug, newCommentContent.trim())
+      setComments(prev => [...prev, nuevo])
       setNewCommentContent('')
     } catch (err) {
       console.error('Error agregando comentario:', err)
@@ -221,15 +147,15 @@ export default function ArticleDetail() {
     <>
       <SEOMeta 
         title={article.title}
-        description={article.excerpt || `${article.title} - Lee el artículo completo en Groove Music Store.`}
-        ogImage={article.coverImage || 'https://groove-store.com/og-image.png'}
+        description={article.subtitle || `${article.title} - Lee el artículo completo en Groove Music Store.`}
+        ogImage={article.coverImageUrl || 'https://groove-store.com/og-image.png'}
         ogType="article"
       />
     <div className="min-h-screen bg-groove-bg-primary text-groove-text-primary">
       {/* Cover Image */}
       <div className="relative w-full h-[350px] md:h-[500px] overflow-hidden">
         <img
-          src={getNewsCoverImage(article.coverImage)}
+          src={getNewsCoverImage(article.coverImageUrl)}
           alt={article.title}
           width={1200}
           height={500}
@@ -263,16 +189,16 @@ export default function ArticleDetail() {
             {article.category}
           </span>
           <h1 className="text-3xl md:text-5xl font-bold mt-4 mb-4 leading-tight">{article.title}</h1>
-          <p className="text-xl text-groove-text-secondary mb-6">{article.excerpt}</p>
+          <p className="text-xl text-groove-text-secondary mb-6">{article.subtitle}</p>
 
           {/* Meta */}
           <div className="flex items-center gap-4 text-sm text-groove-text-secondary mb-8 pb-8 border-b border-white/10">
             <div className="w-10 h-10 rounded-full bg-groove-gold/20 flex items-center justify-center">
-              <span className="font-bold text-groove-gold">{article.author.charAt(0)}</span>
+              <span className="font-bold text-groove-gold">{(article.authorName || 'G').charAt(0)}</span>
             </div>
             <div>
-              <p className="font-semibold text-groove-text-primary">{article.author}</p>
-              <p>{formatDate(article.createdAt)} · {article.viewCount || 0} vistas</p>
+              <p className="font-semibold text-groove-text-primary">{article.authorName}</p>
+              <p>{formatDate(article.publishedAt)} · {article.views || 0} vistas</p>
             </div>
           </div>
         </motion.div>
@@ -300,7 +226,7 @@ export default function ArticleDetail() {
           transition={{ delay: 0.3 }}
           className="bg-groove-bg-secondary rounded-2xl p-6 md:p-10 border border-groove-gold/20 mb-12 prose prose-invert max-w-none"
         >
-          <div className="whitespace-pre-wrap text-groove-text-primary leading-relaxed">{article.content}</div>
+          <div className="whitespace-pre-wrap text-groove-text-primary leading-relaxed">{article.body}</div>
         </motion.div>
 
         {/* Social Actions */}
@@ -338,7 +264,7 @@ export default function ArticleDetail() {
             <form onSubmit={handleAddComment} className="bg-groove-bg-secondary rounded-xl p-6 mb-8 border border-groove-gold/20">
               <div className="flex gap-4 mb-4">
                 <div className="w-10 h-10 rounded-full bg-groove-gold/20 flex items-center justify-center flex-shrink-0">
-                  <span className="font-bold text-groove-gold">{currentUser.displayName?.charAt(0) || 'A'}</span>
+                  <span className="font-bold text-groove-gold">{currentUser.nombre?.charAt(0) || 'A'}</span>
                 </div>
                 <textarea
                   value={newCommentContent}
@@ -385,14 +311,14 @@ export default function ArticleDetail() {
                 >
                   <div className="flex gap-3 mb-2">
                     <div className="w-8 h-8 rounded-full bg-groove-gold/20 flex items-center justify-center flex-shrink-0">
-                      <span className="font-bold text-groove-gold text-xs">{comment.authorName.charAt(0)}</span>
+                      <span className="font-bold text-groove-gold text-xs">{(comment.userName || 'U').charAt(0)}</span>
                     </div>
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="font-semibold text-sm">{comment.authorName}</span>
+                        <span className="font-semibold text-sm">{comment.userName}</span>
                         <span className="text-xs text-groove-text-secondary">{timeAgo(comment.createdAt)}</span>
                       </div>
-                      <p className="text-sm mt-1 text-groove-text-secondary">{comment.content}</p>
+                      <p className="text-sm mt-1 text-groove-text-secondary">{comment.body}</p>
                     </div>
                   </div>
                 </motion.div>

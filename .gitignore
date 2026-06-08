@@ -1,1 +1,27 @@
+# Dependencias
 node_modules
+
+# Build / artefactos de Vite
+dist/
+build/
+
+# Variables de entorno (se mantiene .env.example)
+.env
+.env.local
+.env.development
+.env.production
+.env*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# Sistema / editor
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# Vercel / deploy
+.vercel/

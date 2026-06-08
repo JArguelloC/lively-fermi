@@ -2,19 +2,18 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { LogOut, User as UserIcon, Mail, RotateCw } from 'lucide-react'
-import { sendEmailVerification } from 'firebase/auth'
 import { useAuthStore } from '../../store/authStore'
-import { auth } from '../../services/firebase'
+import { verifyEmail, getCurrentUser, signOut } from '../../services/auth.service'
 
 export default function Account() {
   const navigate = useNavigate()
-  const { currentUser, logout } = useAuthStore()
+  const { currentUser, token, logout, setUser } = useAuthStore()
   const [isResending, setIsResending] = useState(false)
   const [resendMessage, setResendMessage] = useState('')
 
   const handleLogout = async () => {
     try {
-      await auth.signOut()
+      await signOut()
       logout()
       navigate('/')
     } catch (error) {
@@ -23,15 +22,17 @@ export default function Account() {
   }
 
   const handleResendEmail = async () => {
+    if (!token) return
     setIsResending(true)
     try {
-      if (auth.currentUser) {
-        await sendEmailVerification(auth.currentUser)
-        setResendMessage('✓ Correo de verificación reenviado exitosamente')
-        setTimeout(() => setResendMessage(''), 3000)
-      }
-    } catch (error: any) {
-      setResendMessage('❌ Error: ' + (error.message || 'Intenta más tarde'))
+      await verifyEmail(token)
+      const { usuario } = await getCurrentUser(token)
+      setUser(usuario, token)
+      setResendMessage('✓ Tu correo ha sido verificado.')
+      setTimeout(() => setResendMessage(''), 3000)
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Intenta más tarde'
+      setResendMessage('❌ Error: ' + msg)
       setTimeout(() => setResendMessage(''), 3000)
     } finally {
       setIsResending(false)
@@ -60,7 +61,7 @@ export default function Account() {
           <p className="text-groove-text-secondary mt-1">Administra tu cuenta de Groove</p>
         </div>
 
-        {currentUser.emailVerified === false && (
+        {currentUser.emailVerificado === false && (
           <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-4 mb-6">
             <h3 className="text-orange-400 font-bold mb-2">Confirma tu correo electrónico</h3>
             <p className="text-xs text-orange-200 mb-3">
@@ -90,12 +91,12 @@ export default function Account() {
               <p className="text-sm">{currentUser.email}</p>
             </div>
           </div>
-          {currentUser.displayName && (
+          {currentUser.nombre && (
             <div className="bg-groove-bg-primary border border-white/5 rounded-xl p-4 flex items-center gap-4">
               <UserIcon className="w-5 h-5 text-groove-text-secondary" />
               <div className="text-left">
                 <p className="text-xs text-groove-text-secondary font-bold uppercase">Nombre</p>
-                <p className="text-sm">{currentUser.displayName}</p>
+                <p className="text-sm">{currentUser.nombre}</p>
               </div>
             </div>
           )}

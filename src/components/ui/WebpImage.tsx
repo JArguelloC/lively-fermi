@@ -1,5 +1,5 @@
 import React from 'react'
-import { buildResponsiveSrcSet, isLocalImagePath, isWebpImage, RESPONSIVE_IMAGE_WIDTHS } from '../../utils/responsiveImages'
+import { buildResponsiveSrcSet, isLocalImagePath, RESPONSIVE_IMAGE_WIDTHS } from '../../utils/responsiveImages'
 
 type WebpImageProps = React.ImgHTMLAttributes<HTMLImageElement> & {
   src: string

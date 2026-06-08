@@ -1,90 +1,42 @@
 import { useState, useEffect } from 'react'
-import { collection, onSnapshot, query, where, CollectionReference, Query } from 'firebase/firestore'
-import { db } from '../services/firebase'
-import { mockProducts } from '../data/mockData'
+import { getProducts } from '../services/api'
+import { mockProducts, type MockProduct } from '../data/mockData'
 
 export function useProducts(category?: string) {
-  const [products, setProducts] = useState(mockProducts)
+  const [products, setProducts] = useState<MockProduct[]>(mockProducts)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
 
   useEffect(() => {
+    let cancelled = false
     setIsLoading(true)
     setError(null)
 
-    try {
-      // Fetch from Firestore
-      const productsRef = collection(db, 'products')
-      let q: CollectionReference | Query = productsRef
+    getProducts(category)
+      .then((data) => {
+        if (cancelled) return
+        setProducts(data.length > 0 ? data : filterMock(category))
+        setIsLoading(false)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        // Fallback a datos locales si la API no está disponible.
+        console.error('Error cargando productos desde la API:', err)
+        setProducts(filterMock(category))
+        setError(null)
+        setIsLoading(false)
+      })
 
-      if (category && category !== 'all') {
-        q = query(productsRef, where('category', '==', category))
-      }
-
-      const unsubscribe = onSnapshot(
-        q,
-        (snapshot) => {
-          const firebaseProducts = snapshot.docs.map((doc) => ({
-            id: doc.id,
-            ...(doc.data() as any),
-          }))
-
-          if (firebaseProducts.length > 0) {
-            // Map Firebase products to app format
-            const mapped = firebaseProducts.map((p) => ({
-              id: p.id || p.slug,
-              name: p.name,
-              slug: p.slug,
-              description: p.description || '',
-              category: p.category,
-              subcategory: p.subcategory || '',
-              brand: p.brand || '',
-              artist: p.artist || '',
-              album: p.album || '',
-              genre: p.genre || [],
-              releaseYear: p.releaseYear || new Date().getFullYear(),
-              images: p.images || [],
-              price: p.price,
-              compareAtPrice: p.onSale ? p.discountPrice : null,
-              currency: 'USD',
-              stock: p.stock || 0,
-              isAvailable: (p.stock || 0) > 0,
-              isFeatured: false,
-              isOnOffer: p.onSale || false,
-              avgRating: p.avgRating || 0,
-              reviewCount: p.reviewCount || 0,
-              tags: [p.subcategory || p.category],
-            }))
-            setProducts(mapped)
-          } else {
-            // Fallback a mockData si Firestore está vacío
-            const filtered = category && category !== 'all' 
-              ? mockProducts.filter(p => p.category === category)
-              : mockProducts
-            setProducts(filtered)
-          }
-          setIsLoading(false)
-        },
-        (err) => {
-          const filtered = category && category !== 'all'
-            ? mockProducts.filter(p => p.category === category)
-            : mockProducts
-          setProducts(filtered)
-          setError(null)
-          setIsLoading(false)
-        }
-      )
-
-      return () => unsubscribe()
-    } catch (err) {
-      const filtered = category && category !== 'all'
-        ? mockProducts.filter(p => p.category === category)
-        : mockProducts
-      setProducts(filtered)
-      setError(null)
-      setIsLoading(false)
+    return () => {
+      cancelled = true
     }
   }, [category])
 
   return { products, isLoading, error }
+}
+
+function filterMock(category?: string): MockProduct[] {
+  return category && category !== 'all'
+    ? mockProducts.filter((p) => p.category === category)
+    : mockProducts
 }

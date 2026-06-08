@@ -8,7 +8,7 @@ import { signIn, signUp, resetPassword } from '../../services/auth.service'
 import { validateEmailDomain } from '../../services/emailValidator'
 import zxcvbn from 'zxcvbn'
 
-const NAME_ALLOWED_CHARACTERS = /[^\p{L} '\-]/gu
+const NAME_ALLOWED_CHARACTERS = /[^\p{L} '-]/gu
 
 const sanitizeName = (value: string) => value.replace(NAME_ALLOWED_CHARACTERS, '').replace(/\s{2,}/g, ' ')
 
@@ -49,7 +49,7 @@ export default function Login() {
   )
   
   // Nivel de fuerza de contraseña
-  const [passStrength, setPassStrength] = useState<{score: number, feedback: any}>({ score: 0, feedback: { warning: '', suggestions: [] } })
+  const [passStrength, setPassStrength] = useState<{ score: number; feedback: { warning: string; suggestions: string[] } }>({ score: 0, feedback: { warning: '', suggestions: [] } })
 
   // Evaluar contraseña en tiempo real
   useEffect(() => {
@@ -73,7 +73,7 @@ export default function Login() {
       } else if (trimmedName.length < 3) {
         newErrors.name = 'Ingresa tu nombre real (mínimo 3 caracteres)'
         isValid = false
-      } else if (!/^[\p{L}]+(?:[ '\-][\p{L}]+)*$/u.test(trimmedName)) {
+      } else if (!/^[\p{L}]+(?:[ '-][\p{L}]+)*$/u.test(trimmedName)) {
         newErrors.name = 'El nombre solo puede contener letras, espacios, apóstrofes o guiones'
         isValid = false
       }
@@ -137,9 +137,10 @@ export default function Login() {
         setAuthUser(response.usuario, response.token)
         navigate(redirectTo)
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error(error)
-      setErrors({ ...errors, general: error.message || 'Ocurrió un error. Verifica tus datos.' })
+      const msg = error instanceof Error ? error.message : 'Ocurrió un error. Verifica tus datos.'
+      setErrors({ ...errors, general: msg })
     } finally {
       setIsLoading(false)
     }
@@ -167,7 +168,7 @@ export default function Login() {
       return
     }
 
-    if (!/^[\p{L}]+(?:[ '\-][\p{L}]+)*$/u.test(trimmedName)) {
+    if (!/^[\p{L}]+(?:[ '-][\p{L}]+)*$/u.test(trimmedName)) {
       setErrors(prev => ({ ...prev, name: 'El nombre solo puede contener letras, espacios, apóstrofes o guiones' }))
       return
     }

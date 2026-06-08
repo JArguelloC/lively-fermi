@@ -1,32 +1,23 @@
-// src/routes/auth.routes.js - Rutas de autenticación
-// 👤 PERSONA 3: Módulo Auth
-
+// src/routes/auth.routes.js
 import { Router } from 'express';
 import {
+  register,
   login,
-  registro,
-  perfil,
-  actualizarPerfil,
-  cambiarPassword
+  me,
+  updateProfile,
+  requestResetPassword,
+  verifyEmail,
 } from '../controllers/auth.controller.js';
-import { verificarToken } from '../middleware/auth.js';
-import { loginLimiter, passwordLimiter } from '../middleware/security.js';
+import { verificarToken, verificarTokenOpcional } from '../middleware/auth.js';
 
 const router = Router();
 
-// POST /api/v1/auth/login - Iniciar sesión (con rate limit)
-router.post('/login', loginLimiter, login);
-
-// POST /api/v1/auth/registro - Registro de cliente (E-commerce)
-router.post('/registro', registro);
-
-// GET /api/v1/auth/perfil - Obtener perfil del usuario autenticado
-router.get('/perfil', verificarToken, perfil);
-
-// PUT /api/v1/auth/actualizar-perfil - Actualizar datos del perfil
-router.put('/actualizar-perfil', verificarToken, actualizarPerfil);
-
-// PUT /api/v1/auth/cambiar-password - Cambiar contraseña (con rate limit)
-router.put('/cambiar-password', verificarToken, passwordLimiter, cambiarPassword);
+router.post('/register', register);
+router.post('/registro', register); // alias en español
+router.post('/login', login);
+router.get('/me', verificarToken, me);
+router.put('/profile', verificarToken, updateProfile);
+router.post('/request-reset-password', requestResetPassword);
+router.post('/verify-email', verificarTokenOpcional, verifyEmail);
 
 export default router;

@@ -1,12 +1,10 @@
-import { Suspense, lazy, useEffect, useRef } from 'react'
+import { Suspense, lazy, useEffect } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import ScrollToTop from './components/layout/ScrollToTop'
 import { useAuthStore } from './store/authStore'
-import { useCartStore, type CartItem } from './store/cartStore'
 import { useFavoritesStore } from './store/favoritesStore'
 import { useUiStore } from './store/uiStore'
-import { useInitializeProducts } from './hooks/useInitializeProducts'
-import { fixProductImages } from './services/fixProductImages'
+import { getCurrentUser } from './services/auth.service'
 
 const Navbar = lazy(() => import('./components/layout/Navbar'))
 const Footer = lazy(() => import('./components/layout/Footer'))
@@ -33,145 +31,46 @@ function LoadingSpinner() {
   )
 }
 
-function mergeCartItems(baseItems: CartItem[], incomingItems: CartItem[]) {
-  const mergedItems = new Map<string, CartItem>()
-
-  const addItems = (items: CartItem[]) => {
-    items.forEach((item) => {
-      const existingItem = mergedItems.get(item.id)
-
-      if (existingItem) {
-        mergedItems.set(item.id, {
-          ...existingItem,
-          ...item,
-          quantity: existingItem.quantity + item.quantity,
-        })
-        return
-      }
-
-      mergedItems.set(item.id, { ...item })
-    })
-  }
-
-  addItems(baseItems)
-  addItems(incomingItems)
-
-  return Array.from(mergedItems.values())
-}
-
-function serializeCartItems(items: CartItem[]) {
-  return items
-    .slice()
-    .sort((left, right) => left.id.localeCompare(right.id))
-    .map((item) => ({
-      id: item.id,
-      productId: item.productId ?? null,
-      variantId: item.variantId ?? null,
-      name: item.name,
-      price: item.price,
-      quantity: item.quantity,
-      slug: item.slug ?? null,
-      artist: item.artist ?? null,
-      brand: item.brand ?? null,
-      images: item.images ?? [],
-    }))
-}
-
-function areCartItemsEqual(leftItems: CartItem[], rightItems: CartItem[]) {
-  return JSON.stringify(serializeCartItems(leftItems)) === JSON.stringify(serializeCartItems(rightItems))
-}
-
 function App() {
   const setUser = useAuthStore(state => state.setUser)
   const setLoading = useAuthStore(state => state.setLoading)
   const notifications = useUiStore(state => state.notifications)
   const removeNotification = useUiStore(state => state.removeNotification)
-  const firebaseRef = useRef<{ auth?: any; db?: any }>({})
-  
-  // ✅ Inicializar productos en Firestore al cargar la app
-  const { isInitialized } = useInitializeProducts()
 
-  // ✅ Reparar imágenes de productos al iniciar (solo en desarrollo)
+  // Restaurar sesión desde el token JWT guardado y validar contra la API REST.
   useEffect(() => {
-    if (import.meta.env.DEV) {
-      fixProductImages().catch(err => console.error('Fix images error:', err))
-    }
-  }, [])
-
-  useEffect(() => {
-    let unsubscribe: (() => void) | undefined
     let isMounted = true
 
-    async function initFirebaseAuth() {
+    async function restoreSession() {
+      const token = localStorage.getItem('authToken')
+      if (!token) {
+        setLoading(false)
+        return
+      }
+
       try {
-        const [{ auth, db }, { onAuthStateChanged }, { doc, getDoc }] = await Promise.all([
-          import('./services/firebase'),
-          import('firebase/auth'),
-          import('firebase/firestore'),
-        ])
-
+        const { usuario } = await getCurrentUser(token)
         if (!isMounted) return
-        firebaseRef.current = { auth, db }
-
-        unsubscribe = onAuthStateChanged(auth, async (user) => {
-          setUser(user)
-          setLoading(false)
-
-          if (user) {
-            try {
-              const localCartItems = useCartStore.getState().items
-              const cartDoc = await getDoc(doc(db, 'carts', user.uid))
-              const remoteCartItems = cartDoc.exists() && Array.isArray(cartDoc.data().items)
-                ? (cartDoc.data().items as CartItem[])
-                : []
-
-              const cartToRestore = remoteCartItems.length > 0 && !areCartItemsEqual(localCartItems, remoteCartItems)
-                ? mergeCartItems(remoteCartItems, localCartItems)
-                : localCartItems
-
-              if (cartToRestore.length > 0) {
-                await useCartStore.getState().setCart(cartToRestore)
-              }
-
-              await useFavoritesStore.getState().loadFavorites(user.uid)
-            } catch (error) {
-              console.error('Error fetching user data from Firebase:', error)
-            }
-          } else {
-            useFavoritesStore.getState().clearFavorites()
-          }
-        })
+        setUser(usuario, token)
+        await useFavoritesStore.getState().loadFavorites(usuario.id)
       } catch (error) {
-        console.error('Firebase initialization failed:', error)
+        if (!isMounted) return
+        console.error('Sesión no válida, cerrando:', error)
+        localStorage.removeItem('authToken')
+        localStorage.removeItem('currentUser')
+        setUser(null)
+        useFavoritesStore.getState().clearFavorites()
+      } finally {
+        if (isMounted) setLoading(false)
       }
     }
 
-    initFirebaseAuth()
+    restoreSession()
 
     return () => {
       isMounted = false
-      unsubscribe?.()
     }
   }, [setUser, setLoading])
-
-  // Polling automático para verificar email (cada 30 segundos) - reducir frecuencia para evitar exceso de llamadas
-  useEffect(() => {
-    const pollInterval = setInterval(async () => {
-      const user = firebaseRef.current.auth?.currentUser
-      if (user && !user.emailVerified) {
-        try {
-          await user.reload()
-          if (user.emailVerified) {
-            setUser(user)
-          }
-        } catch (error) {
-          // Silent fail - es normal que falle ocasionalmente
-        }
-      }
-    }, 30000)
-
-    return () => clearInterval(pollInterval)
-  }, [setUser])
 
   return (
     <BrowserRouter>
