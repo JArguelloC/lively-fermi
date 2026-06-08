@@ -6,8 +6,7 @@ import { useCartStore } from '../../store/cartStore';
 import { useAuthStore } from '../../store/authStore';
 import { useFavoritesStore } from '../../store/favoritesStore';
 import { useUiStore } from '../../store/uiStore';
-import { db } from '../../services/firebase';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { getProductBySlug, getProducts } from '../../services/api';
 import { formatPrice } from '../../utils/formatPrice';
 import { Product, ProductVariant } from '../../types/product.types';
 import { ProductCard } from '../../components/ecommerce/ProductCard';
@@ -44,88 +43,48 @@ export default function ProductDetail() {
   };
 
   useEffect(() => {
+    const loadRelatedProducts = async (category: string, currentProductId: string) => {
+      try {
+        const list = await getProducts(category);
+        const related = (list as unknown as Product[]).filter(p => p.id !== currentProductId);
+        setRelatedProducts(related.slice(0, 5));
+      } catch (error) {
+        console.error("Error fetching related products:", error);
+      }
+    };
+
     const loadProduct = async () => {
       if (!slug) return;
       setIsLoading(true);
       setStockMessage('');
-      
-      const productsRef = collection(db, "products");
-      const q = query(productsRef, where("slug", "==", slug));
-      
+
       try {
-        const querySnapshot = await getDocs(q);
-        if (!querySnapshot.empty) {
-          const productDoc = querySnapshot.docs[0];
-          const rawProductData = productDoc.data() as Record<string, any>;
-          const productData = { id: productDoc.id, ...rawProductData } as Product;
-          const normalizedProduct: Product = {
-            ...productData,
-            title: rawProductData.title ?? rawProductData.name ?? productData.title ?? 'Producto',
-            description: rawProductData.description ?? rawProductData.summary ?? productData.description ?? '',
-            basePrice: rawProductData.basePrice ?? rawProductData.price ?? productData.basePrice ?? 0,
-            avgRating: rawProductData.avgRating ?? productData.avgRating ?? 0,
-            reviewCount: rawProductData.reviewCount ?? productData.reviewCount ?? 0,
-            images: Array.isArray(rawProductData.images) && rawProductData.images.length > 0
-              ? rawProductData.images
-              : rawProductData.image
-                ? [rawProductData.image]
-                : Array.isArray(productData.images) && productData.images.length > 0
-                  ? productData.images
-                  : ['/images/placeholder.svg'],
-            category: rawProductData.category ?? productData.category ?? 'merch',
-            variants: Array.isArray(rawProductData.variants) && rawProductData.variants.length > 0
-              ? rawProductData.variants
-              : Array.isArray(productData.variants)
-                ? productData.variants
-                : [],
-            createdAt: rawProductData.createdAt ?? productData.createdAt ?? new Date().toISOString(),
-            updatedAt: rawProductData.updatedAt ?? productData.updatedAt ?? new Date().toISOString(),
-            isActive: rawProductData.isActive ?? productData.isActive ?? true,
-          } as Product;
-          setProduct(normalizedProduct);
+        const data = await getProductBySlug(slug);
+        const normalizedProduct = data as unknown as Product;
+        setProduct(normalizedProduct);
 
-          const fallbackVariant: ProductVariant = {
-            id: normalizedProduct.id,
-            name: normalizedProduct.title || rawProductData.name || 'Producto',
-            sku: rawProductData.sku || normalizedProduct.id,
-            price: rawProductData.price ?? rawProductData.basePrice ?? normalizedProduct.basePrice ?? 0,
-            stock: rawProductData.stock ?? 0,
-            attributes: rawProductData.attributes || {},
-          };
+        const variants = normalizedProduct.variants ?? [];
+        setSelectedVariant(
+          variants.length > 0
+            ? variants[0]
+            : {
+                id: normalizedProduct.id,
+                name: normalizedProduct.title || 'Producto',
+                sku: normalizedProduct.id,
+                price: normalizedProduct.basePrice ?? 0,
+                stock: 0,
+              }
+        );
 
-          if (Array.isArray(productData.variants) && productData.variants.length > 0) {
-            setSelectedVariant(productData.variants[0]);
-          } else {
-            setSelectedVariant(fallbackVariant);
-          }
-
-          if (user) {
-            await loadFavorites(user.uid);
-          }
-          loadRelatedProducts(productData.category, productData.id);
-        } else {
-          setProduct(null);
+        if (user) {
+          await loadFavorites(user.id);
         }
+        await loadRelatedProducts(normalizedProduct.category, normalizedProduct.id);
       } catch (error) {
         console.error("Error fetching product:", error);
         setProduct(null);
       } finally {
         setIsLoading(false);
-      }
-    };
-
-    const loadRelatedProducts = async (category: string, currentProductId: string) => {
-      const productsRef = collection(db, "products");
-      const q = query(productsRef, where("category", "==", category));
-      
-      try {
-        const querySnapshot = await getDocs(q);
-        const related = querySnapshot.docs
-          .map(doc => ({ id: doc.id, ...doc.data() } as Product))
-          .filter(p => p.id !== currentProductId);
-        setRelatedProducts(related.slice(0, 5));
-      } catch (error) {
-        console.error("Error fetching related products:", error);
       }
     };
 
@@ -140,7 +99,7 @@ export default function ProductDetail() {
         setQty(selectedVariant.stock);
         return;
       }
-      const addedSuccessfully = await addItem({
+      addItem({
         id: `${product.id}-${selectedVariant.id}`,
         productId: product.id,
         variantId: selectedVariant.id,
@@ -152,11 +111,9 @@ export default function ProductDetail() {
         slug: product.slug,
       }, qty);
 
-      if (addedSuccessfully) {
-        setAdded(true);
-        addNotification({ message: `${product.title || 'Producto'} añadido al carrito${!isAuthenticated ? ' (invitado)' : ''}`, type: 'success' })
-        setTimeout(() => setAdded(false), 2000);
-      }
+      setAdded(true);
+      addNotification({ message: `${product.title || 'Producto'} añadido al carrito${!isAuthenticated ? ' (invitado)' : ''}`, type: 'success' })
+      setTimeout(() => setAdded(false), 2000);
     }
   };
 
@@ -167,7 +124,7 @@ export default function ProductDetail() {
     }
     const wasFavorite = isFavorite(product.id);
     try {
-      await toggleFavorite(user.uid, product.id);
+      await toggleFavorite(user.id, product.id);
       if (!wasFavorite) {
         addNotification({
           message: `${product.title || 'Producto'} añadido a favoritos`,

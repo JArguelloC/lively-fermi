@@ -1,33 +1,11 @@
-import { useState, useEffect } from 'react'
-import { Link, useParams, useNavigate } from 'react-router-dom'
+import { useState } from 'react'
+import { Link, useParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { SlidersHorizontal, Star, Heart, X } from 'lucide-react'
 import { formatPrice } from '../../utils/formatPrice'
-import { useCartStore } from '../../store/cartStore'
-import { useAuthStore } from '../../store/authStore'
-import { db } from '../../services/firebase'
-import { collection, query, where, onSnapshot, QuerySnapshot, DocumentData } from 'firebase/firestore'
-import { fixProductImages } from '../../services/fixProductImages'
+import { useProducts } from '../../hooks/useProducts'
 import WebpImage from '../../components/ui/WebpImage'
 import SEOMeta from '../../components/ui/SEOMeta'
-
-interface Product {
-  id: string
-  name: string
-  slug: string
-  artist?: string
-  brand?: string
-  price: number
-  compareAtPrice?: number
-  stock: number
-  images: string[]
-  category: string
-  avgRating?: number
-  reviewCount?: number
-  onSale?: boolean
-  discountPrice?: number
-  genre?: string
-}
 
 const categoryMap: Record<string, string> = {
   musica: 'music', merch: 'merch', instrumentos: 'instruments', ofertas: 'offers'
@@ -48,10 +26,7 @@ export default function CategoryPage() {
   const categoryKey = categoryMap[categoria || ''] || ''
   const [sort, setSort] = useState('featured')
   const [showFilters, setShowFilters] = useState(false)
-  const [allProducts, setAllProducts] = useState<Product[]>([])
-  const addItem = useCartStore(state => state.addItem)
-  const isAuthenticated = useAuthStore(state => state.isAuthenticated)
-  const navigate = useNavigate()
+  const { products: allProducts } = useProducts(categoryKey || 'all')
 
   const [selectedPrices, setSelectedPrices] = useState<string[]>([])
   const [selectedGenres, setSelectedGenres] = useState<string[]>([])
@@ -60,35 +35,6 @@ export default function CategoryPage() {
   const togglePrice = (range: string) => setSelectedPrices(prev => prev.includes(range) ? prev.filter(r => r !== range) : [...prev, range])
   const toggleGenre = (genre: string) => setSelectedGenres(prev => prev.includes(genre) ? prev.filter(g => g !== genre) : [...prev, genre])
   const toggleRating = (rating: number) => setSelectedRatings(prev => prev.includes(rating) ? prev.filter(r => r !== rating) : [...prev, rating])
-
-  // Reparar imágenes al montar el componente
-  useEffect(() => {
-    fixProductImages().catch(console.error)
-  }, [])
-
-  // Cargar productos desde Firestore
-  useEffect(() => {
-    const productsRef = collection(db, 'products')
-    let q: any = productsRef
-    
-    if (categoryKey) {
-      q = query(productsRef, where('category', '==', categoryKey))
-    }
-    
-    const unsubscribe = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
-      const docs = snapshot.docs.map((doc: any) => {
-        const data = { id: doc.id, ...doc.data() } as any
-        // Asegurar que SIEMPRE haya imágenes
-        const images = data.images && Array.isArray(data.images) && data.images.length > 0 
-          ? data.images 
-          : [data.image || '/images/placeholder.svg']
-        return { ...data, images } as Product
-      })
-      setAllProducts(docs)
-    })
-    
-    return () => unsubscribe()
-  }, [categoryKey])
 
   let products = allProducts
 
@@ -301,7 +247,7 @@ export default function CategoryPage() {
                         img.src = '/images/placeholder.svg';
                       }}
                     />
-                    {product.onSale && product.compareAtPrice && (
+                    {product.isOnOffer && product.compareAtPrice && (
                       <span className="absolute top-3 left-3 bg-red-600 text-white text-xs font-bold px-2 py-1 rounded-full">
                         -{Math.round((1 - product.price / product.compareAtPrice) * 100)}%
                       </span>

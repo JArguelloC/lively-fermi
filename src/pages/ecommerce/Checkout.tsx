@@ -12,16 +12,13 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { CreditCard, MapPin, Check, Lock, ArrowRight, ArrowLeft, ShieldCheck, ShoppingCart, AlertCircle } from 'lucide-react'
+import { CreditCard, MapPin, Check, Lock, ArrowRight, ArrowLeft, ShoppingCart, AlertCircle } from 'lucide-react'
 import SEOMeta from '../../components/ui/SEOMeta'
 import MapboxGeocoderComponent from '../../components/ecommerce/MapboxGeocoder'
-import { formatPrice } from '../../data/mockData'
 import { useCartStore } from '../../store/cartStore'
 import { useAuthStore } from '../../store/authStore'
 import { PayPalScriptProvider, PayPalButtons } from '@paypal/react-paypal-js'
-import { validateOrderStock, decrementProductStock } from '../../services/stockService'
-import { auth, db } from '../../services/firebase'
-import { deleteDoc, doc } from 'firebase/firestore'
+import { createOrder, type CreateOrderInput } from '../../services/api'
 
 const steps = ['Envío', 'Pago', 'Confirmar']
 
@@ -48,7 +45,7 @@ export default function Checkout() {
   // FORM STATE - Datos de envío Ecuador
   // ═══════════════════════════════════════════════════════════════
   const [shippingData, setShippingData] = useState<ShippingFormData>({
-    name: currentUser?.displayName || '',
+    name: currentUser?.nombre || '',
     email: currentUser?.email || '',
     phone: '',
     address: '',
@@ -83,6 +80,28 @@ export default function Checkout() {
   }
 
   // ═══════════════════════════════════════════════════════════════
+  // Construir el payload del pedido para la API REST
+  // ═══════════════════════════════════════════════════════════════
+  const buildOrderInput = (metodoPago: string, paymentIntentId?: string): CreateOrderInput => ({
+    items: cartItems.map(item => ({
+      productId: item.productId,
+      variantId: item.variantId,
+      quantity: item.quantity,
+      name: item.name,
+    })),
+    shipping: {
+      fullName: shippingData.name,
+      addressLine1: shippingData.address,
+      city: shippingData.city,
+      state: shippingData.province,
+      postalCode: shippingData.zip,
+      country: 'Ecuador',
+    },
+    paymentMethod: metodoPago,
+    paymentIntentId,
+  })
+
+  // ═══════════════════════════════════════════════════════════════
   // HANDLER: Pago con Tarjeta
   // ═══════════════════════════════════════════════════════════════
   const handleCardPayment = async () => {
@@ -90,119 +109,50 @@ export default function Checkout() {
     setStockError('')
 
     try {
-      // CAPA 2: Validar stock de todos los items ANTES de procesar pago
-      console.log('🔍 CAPA 2: Validando stock...')
-      const stockValidation = await validateOrderStock(cartItems)
-
-      if (!stockValidation.valid) {
-        setStockError(stockValidation.errors.join(' | '))
-        setIsProcessing(false)
-        return
-      }
-
       // Simular procesamiento de pago (2 segundos)
-      console.log('💳 Procesando pago con tarjeta...')
       await new Promise(resolve => setTimeout(resolve, 2000))
 
-      // CAPA 3: Decrementar stock de forma ATÓMICA
-      console.log('⚙️  CAPA 3: Actualizando inventario (transacción atómica)...')
-      const stockDecrement = await decrementProductStock(cartItems)
+      // El backend valida el stock y lo decrementa de forma atómica
+      const pedido = await createOrder(buildOrderInput('card'))
 
-      if (!stockDecrement.success) {
-        setStockError(stockDecrement.message || 'Error al actualizar el inventario.')
-        setIsProcessing(false)
-        return
-      }
-
-      // ✅ PAGO EXITOSO + STOCK DECREMENTADO
-      const orderId = `ORD-${Math.floor(Math.random() * 10000)}`
       try {
-        localStorage.setItem('lastOrderId', orderId)
+        localStorage.setItem('lastOrderId', pedido.id)
         localStorage.setItem('lastPayer', shippingData.name)
       } catch (e) {
         console.error('Error saving order to localStorage:', e)
       }
 
-      // Limpiar carrito LOCALMENTE
       await clearCart()
-
-      // 🗑️ PURGAR CARRITO EN FIREBASE
-      const user = auth.currentUser
-      if (user) {
-        try {
-          await deleteDoc(doc(db, 'carts', user.uid))
-          console.log(`✅ Carrito purgado en Firestore para usuario ${user.uid}`)
-        } catch (deleteError) {
-          console.error('⚠️  No se pudo eliminar carrito de Firestore:', deleteError)
-          // No es bloqueante - la orden ya está completada
-        }
-      }
-
       navigate('/order-confirmation')
     } catch (error) {
-      console.error('❌ Error en pago con tarjeta:', error)
-      setStockError('Error procesando el pago. Por favor, intenta de nuevo.')
+      const msg = error instanceof Error ? error.message : 'Error procesando el pago. Por favor, intenta de nuevo.'
+      console.error('Error en pago con tarjeta:', error)
+      setStockError(msg)
       setIsProcessing(false)
     }
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // HANDLER: Pago con PayPal
+  // HANDLER: Pago con PayPal (tras capturar la orden)
   // ═══════════════════════════════════════════════════════════════
-  const handlePayPalApprove = async (data: any, actions: any) => {
+  const finishPayPalOrder = async (paymentIntentId: string | undefined, payerName: string) => {
     try {
-      // CAPA 2: Validar stock ANTES de procesar PayPal
-      console.log('🔍 CAPA 2: Validando stock con PayPal...')
-      const stockValidation = await validateOrderStock(cartItems)
+      // El backend valida el stock y lo decrementa de forma atómica
+      const pedido = await createOrder(buildOrderInput('paypal', paymentIntentId))
 
-      if (!stockValidation.valid) {
-        setStockError(stockValidation.errors.join(' | '))
-        return
+      try {
+        localStorage.setItem('lastOrderId', pedido.id)
+        localStorage.setItem('lastPayer', payerName || shippingData.name || 'Cliente')
+      } catch (e) {
+        console.error('Error saving PayPal order:', e)
       }
 
-      return actions.order.capture().then(async (details: any) => {
-        try {
-          // CAPA 3: Decrementar stock de forma ATÓMICA
-          console.log('⚙️  CAPA 3: Actualizando inventario (transacción atómica)...')
-          const stockDecrement = await decrementProductStock(cartItems)
-
-          if (!stockDecrement.success) {
-            setStockError(stockDecrement.message || 'Error al actualizar el inventario.')
-            return
-          }
-
-          // ✅ PAGO EXITOSO + STOCK DECREMENTADO
-          const payerName = details.payer?.name?.given_name || 'Cliente'
-          try {
-            localStorage.setItem('lastOrderId', details.id)
-            localStorage.setItem('lastPayer', payerName)
-          } catch (e) {
-            console.error('Error saving PayPal order:', e)
-          }
-
-          // Limpiar carrito LOCALMENTE
-          await clearCart()
-
-          // 🗑️ PURGAR CARRITO EN FIREBASE
-          const user = auth.currentUser
-          if (user) {
-            try {
-              await deleteDoc(doc(db, 'carts', user.uid))
-              console.log(`✅ Carrito purgado en Firestore para usuario ${user.uid}`)
-            } catch (deleteError) {
-              console.error('⚠️  No se pudo eliminar carrito de Firestore:', deleteError)
-            }
-          }
-
-          navigate('/order-confirmation')
-        } catch (error) {
-          console.error('❌ Error en aprobación PayPal:', error)
-          setStockError('Error procesando la compra. Por favor, intenta de nuevo.')
-        }
-      })
+      await clearCart()
+      navigate('/order-confirmation')
     } catch (error) {
-      console.error('❌ Error con PayPal:', error)
-      setStockError('Error con PayPal. Por favor, intenta de nuevo.')
+      const msg = error instanceof Error ? error.message : 'Error con PayPal. Por favor, intenta de nuevo.'
+      console.error('Error con PayPal:', error)
+      setStockError(msg)
     }
   }
 
@@ -429,7 +379,11 @@ export default function Checkout() {
                             purchase_units: [{ amount: { currency_code: 'USD', value: (total / 100).toString() } }]
                           })
                         }}
-                        onApprove={handlePayPalApprove}
+                        onApprove={async (_data, actions) => {
+                          const details = await actions.order!.capture()
+                          const payerName = details?.payer?.name?.given_name || ''
+                          await finishPayPalOrder(details?.id, payerName)
+                        }}
                       />
                     )}
                   </AnimatePresence>

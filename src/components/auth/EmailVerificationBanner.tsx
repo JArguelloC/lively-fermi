@@ -1,31 +1,34 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Mail, X, RotateCw, CheckCircle } from 'lucide-react'
-import { sendEmailVerification } from 'firebase/auth'
-import { auth } from '../../services/firebase'
+import { verifyEmail, getCurrentUser } from '../../services/auth.service'
 import { useAuthStore } from '../../store/authStore'
 
 export default function EmailVerificationBanner() {
   const currentUser = useAuthStore(state => state.currentUser)
+  const token = useAuthStore(state => state.token)
+  const setUser = useAuthStore(state => state.setUser)
   const [isLoading, setIsLoading] = useState(false)
   const [isDismissed, setIsDismissed] = useState(false)
   const [message, setMessage] = useState('')
 
   // No mostrar si no hay usuario, ya está verificado, o fue dismissido
-  if (!currentUser || currentUser.emailVerified || isDismissed) {
+  if (!currentUser || currentUser.emailVerificado || isDismissed) {
     return null
   }
 
   const handleResendEmail = async () => {
+    if (!token) return
     setIsLoading(true)
     try {
-      if (auth.currentUser) {
-        await sendEmailVerification(auth.currentUser)
-        setMessage('✓ Correo de verificación reenviado. Revisa tu bandeja de entrada.')
-        setTimeout(() => setMessage(''), 3000)
-      }
-    } catch (error: any) {
-      setMessage('❌ Error al reenviar: ' + (error.message || 'Intenta más tarde'))
+      await verifyEmail(token)
+      const { usuario } = await getCurrentUser(token)
+      setUser(usuario, token)
+      setMessage('✓ Tu correo ha sido verificado.')
+      setTimeout(() => setMessage(''), 3000)
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Intenta más tarde'
+      setMessage('❌ Error al verificar: ' + msg)
       setTimeout(() => setMessage(''), 3000)
     } finally {
       setIsLoading(false)
@@ -59,7 +62,7 @@ export default function EmailVerificationBanner() {
               className="flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 bg-orange-500/20 hover:bg-orange-500/30 disabled:opacity-50 disabled:cursor-not-allowed text-orange-300 rounded-lg text-xs sm:text-sm font-medium transition-colors"
             >
               <RotateCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-              {isLoading ? 'Enviando...' : 'Reenviar'}
+              {isLoading ? 'Verificando...' : 'Verificar ahora'}
             </button>
             <button
               onClick={() => setIsDismissed(true)}

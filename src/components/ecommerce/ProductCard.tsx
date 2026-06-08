@@ -15,11 +15,13 @@ interface ProductCardProps {
 }
 
 export const ProductCard: React.FC<ProductCardProps> = ({ product, onAddToCart, showAddToCart = true }) => {
+  // Compatibilidad con el DTO de la API (name/price/stock) y el tipo Product (title/basePrice/variants)
+  const p = product as Product & { name?: string; price?: number; stock?: number };
   const isNew = product.createdAt && new Date(product.createdAt).getTime() > Date.now() - 30 * 24 * 60 * 60 * 1000;
-  const productName = product.title || (product as any).name || 'Producto';
-  const rawPrice = (product as any).price;
-  const productStock = typeof (product as any).stock === 'number'
-    ? (product as any).stock
+  const productName = product.title || p.name || 'Producto';
+  const rawPrice = p.price;
+  const productStock = typeof p.stock === 'number'
+    ? p.stock
     : Array.isArray(product.variants)
       ? product.variants.reduce((total, variant) => total + (variant.stock || 0), 0)
       : 0;
@@ -33,7 +35,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onAddToCart, 
   
   return (
     <Link to={`/producto/${product.slug}`}>
-      <Card product={product} className="group flex flex-col h-full bg-gray-900 border-gray-800 transition-all duration-300 hover:border-yellow-500/50 hover:shadow-xl hover:-translate-y-1">
+      <Card className="group flex flex-col h-full bg-gray-900 border-gray-800 transition-all duration-300 hover:border-yellow-500/50 hover:shadow-xl hover:-translate-y-1">
         {/* Image Container */}
         <div className="relative aspect-square sm:aspect-[4/3] overflow-hidden bg-gray-800">
           <WebpImage 

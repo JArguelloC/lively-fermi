@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import mapboxgl from 'mapbox-gl'
-// @ts-ignore - package has no types in this project
+// @ts-expect-error - package has no types in this project
 import MapboxGeocoder from '@mapbox/mapbox-gl-geocoder'
 import '@mapbox/mapbox-gl-geocoder/dist/mapbox-gl-geocoder.css'
 import 'mapbox-gl/dist/mapbox-gl.css'
@@ -14,10 +14,29 @@ interface MapboxGeocoderProps {
   error?: string
 }
 
+// Tipos mínimos para el geocoder de Mapbox (el paquete no trae tipos)
+interface GeocoderResultContext {
+  id: string
+  text: string
+}
+interface GeocoderResultFeature {
+  center?: [number, number]
+  place_name?: string
+  context?: GeocoderResultContext[]
+}
+interface GeocoderResultEvent {
+  result: GeocoderResultFeature
+}
+interface MapboxGeocoderControl extends mapboxgl.IControl {
+  on(event: string, cb: (e: GeocoderResultEvent) => void): void
+  off(event: string, cb: (...args: unknown[]) => void): void
+  setInput(value: string): void
+}
+
 export default function MapboxGeocoderComponent({ value, onChange, onLocationSelect, error }: MapboxGeocoderProps) {
   const mapContainer = useRef<HTMLDivElement>(null)
   const map = useRef<mapboxgl.Map | null>(null)
-  const geocoder = useRef<any | null>(null)
+  const geocoder = useRef<MapboxGeocoderControl | null>(null)
   const marker = useRef<mapboxgl.Marker | null>(null)
   const [isMapReady, setIsMapReady] = useState(false)
 
@@ -49,11 +68,11 @@ export default function MapboxGeocoderComponent({ value, onChange, onLocationSel
       })
 
       // Add geocoder to map
-      map.current.addControl(geocoder.current)
+      map.current.addControl(geocoder.current!)
 
       // PARTE 1: Escuchar evento 'result' - cuando el usuario selecciona una dirección
       // Este es el punto donde Mapbox retorna las coordenadas y la información de ubicación
-      geocoder.current?.on('result', (e: any) => {
+      geocoder.current?.on('result', (e: GeocoderResultEvent) => {
         try {
           const selectedFeature = e.result
           
@@ -77,7 +96,7 @@ export default function MapboxGeocoderComponent({ value, onChange, onLocationSel
           let province = ''
           
           // Parse the context array to find city and province information
-          addressContext.forEach((context: any) => {
+          addressContext.forEach((context: GeocoderResultContext) => {
             if (context.id.includes('place')) {
               city = context.text // City/Municipality
             }
@@ -175,6 +194,8 @@ export default function MapboxGeocoderComponent({ value, onChange, onLocationSel
     } catch (err) {
       console.error('Error initializing Mapbox:', err)
     }
+    // El mapa se inicializa una sola vez; los callbacks se leen vía refs/props.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Update geocoder input when external value changes

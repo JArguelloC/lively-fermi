@@ -25,13 +25,9 @@ app.use(cors(corsConfig));
 // 2. Headers de seguridad (Helmet)
 app.use(helmetMiddleware);
 
-// 3. Rate Limiting (200 peticiones/15min)
-// Limitar SOLO rutas sensibles
+// 3. Rate Limiting - Limitar SOLO rutas sensibles
 app.use('/api/v1/auth', apiLimiter);
-app.use('/api/v1/pagos', apiLimiter);
 app.use('/api/v1/pedidos', apiLimiter);
-app.use('/api/v1/facturas', apiLimiter);
-
 
 
 // 4. Parsear JSON
@@ -59,9 +55,7 @@ const logRequest = (req, res, next) => {
 app.use(logRequest);
 
 // 7. Servir archivos estáticos (imágenes)
-app.use('/logos', express.static(path.join(process.cwd(), 'public/logos')));
-app.use('/productos', express.static(path.join(process.cwd(), 'public/productos')));
-app.use('/promociones', express.static(path.join(process.cwd(), 'public/promociones')));
+app.use('/public', express.static(path.join(process.cwd(), 'public')));
 
 // ========== RUTAS ==========
 
@@ -84,9 +78,7 @@ app.use('/api', routes);
 // Ruta no encontrada
 app.use((req, res) => {
   res.status(404).json({
-    status: 'error',
-    message: `Endpoint no encontrado: ${req.method} ${req.url}`,
-    data: null
+    message: `Endpoint no encontrado: ${req.method} ${req.url}`
   });
 });
 
@@ -115,10 +107,8 @@ app.use((err, req, res, next) => {
   }
 
   res.status(statusCode).json({
-    status: 'error',
     message,
-    error: process.env.NODE_ENV === 'production' ? undefined : err.message,
-    data: null
+    error: process.env.NODE_ENV === 'production' ? undefined : err.message
   });
 });
 

@@ -46,9 +46,12 @@ enum MetodoPago {
 model Usuario {
   id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   correo            String    @unique
+  hashContrasena    String?   @map("hash_contrasena")
   nombreVisible     String?   @map("nombre_visible")
   fotoUrl           String?   @map("foto_url")
+  telefono          String?
   rol               RolUsuario @default(cliente)
+  correoVerificado  Boolean   @default(false) @map("correo_verificado")
   creadoEn          DateTime  @default(now()) @map("creado_en") @db.Timestamptz(6)
   ultimoAccesoEn    DateTime? @map("ultimo_acceso_en") @db.Timestamptz(6)
   idClienteStripe   String?   @map("id_cliente_stripe")
@@ -101,9 +104,16 @@ model Producto {
   categoria         String
   subcategoria      String?
   artista           String?
+  album             String?
   sello             String?
+  genero            String[]  @default([])
+  etiquetas         String[]  @default([])
   fechaLanzamiento  DateTime? @map("fecha_lanzamiento") @db.Date
+  anioLanzamiento   Int?      @map("anio_lanzamiento")
   precioBase        Decimal   @map("precio_base") @db.Decimal(10, 2)
+  precioComparado   Decimal?  @map("precio_comparado") @db.Decimal(10, 2)
+  enOferta          Boolean   @default(false) @map("en_oferta")
+  moneda            String    @default("USD")
   promedioRating    Decimal?  @map("promedio_rating") @db.Decimal(3, 2)
   totalResenas      Int       @default(0) @map("total_resenas")
   imagenes          String[]  @default([])

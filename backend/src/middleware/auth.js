@@ -1,63 +1,40 @@
-// src/middleware/auth.js
+// src/middleware/auth.js - Autenticación JWT (Groove)
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'tu-secreto-super-seguro-cambiar-en-produccion';
-const JWT_EXPIRES = process.env.JWT_EXPIRES || '24h';
+const JWT_SECRET = process.env.JWT_SECRET || 'dev-groove-secret-change-me';
+const JWT_EXPIRES = process.env.JWT_EXPIRES || '7d';
 
 /**
- * Genera un token JWT
+ * Genera un token JWT a partir de un payload { id, rol }.
  */
 export function generarToken(payload) {
   return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES });
 }
 
 /**
- * Middleware: Verifica que el usuario esté autenticado
+ * Middleware: exige un token válido. Coloca { id, rol } en req.usuario.
  */
 export function verificarToken(req, res, next) {
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({
-      status: 'error',
-      message: 'Token no proporcionado',
-      data: null
-    });
+    return res.status(401).json({ message: 'No autenticado: token no proporcionado' });
   }
 
-  const token = authHeader.split(' ')[1];
+  const token = authHeader.slice(7);
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    
-    // ✅ Estructura completa del usuario
-    req.usuario = {
-      id: decoded.id,
-      rol: decoded.rol,
-      tipo: decoded.tipo,
-      id_cliente: decoded.id_cliente || null,
-      id_empleado: decoded.id_empleado || null
-    };
-    
+    req.usuario = { id: decoded.id, rol: decoded.rol };
     next();
   } catch (error) {
-    if (error.name === 'TokenExpiredError') {
-      return res.status(401).json({
-        status: 'error',
-        message: 'Token expirado',
-        data: null
-      });
-    }
-    return res.status(401).json({
-      status: 'error',
-      message: 'Token inválido',
-      data: null
-    });
+    const expirado = error.name === 'TokenExpiredError';
+    return res.status(401).json({ message: expirado ? 'Token expirado' : 'Token inválido' });
   }
 }
 
 /**
- * Middleware opcional: Verifica token si existe, pero no requiere
+ * Middleware: verifica el token si existe, pero no lo exige.
  */
 export function verificarTokenOpcional(req, res, next) {
   const authHeader = req.headers.authorization;
@@ -67,73 +44,28 @@ export function verificarTokenOpcional(req, res, next) {
     return next();
   }
 
-  const token = authHeader.split(' ')[1];
-
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.usuario = {
-      id: decoded.id,
-      rol: decoded.rol,
-      tipo: decoded.tipo,
-      id_cliente: decoded.id_cliente || null,
-      id_empleado: decoded.id_empleado || null
-    };
+    const decoded = jwt.verify(authHeader.slice(7), JWT_SECRET);
+    req.usuario = { id: decoded.id, rol: decoded.rol };
   } catch {
     req.usuario = null;
   }
-  
   next();
 }
 
 /**
- * Middleware: Verificar que sea cliente
- */
-export function soloClientes(req, res, next) {
-  if (req.usuario?.tipo !== 'CLIENTE') {
-    return res.status(403).json({
-      status: 'error',
-      message: 'Acceso solo para clientes',
-      data: null
-    });
-  }
-  next();
-}
-
-/**
- * Middleware: Verificar que sea empleado
- */
-export function soloEmpleados(req, res, next) {
-  if (req.usuario?.tipo !== 'EMPLEADO') {
-    return res.status(403).json({
-      status: 'error',
-      message: 'Acceso solo para empleados',
-      data: null
-    });
-  }
-  next();
-}
-
-/**
- * Middleware: Verificar roles específicos
+ * Middleware factory: exige uno de los roles indicados.
  */
 export function requiereRol(...roles) {
   return (req, res, next) => {
-    if (!roles.includes(req.usuario?.rol)) {
-      return res.status(403).json({
-        status: 'error',
-        message: `Acceso denegado. Roles permitidos: ${roles.join(', ')}`,
-        data: null
-      });
+    if (!req.usuario) {
+      return res.status(401).json({ message: 'No autenticado' });
+    }
+    if (!roles.includes(req.usuario.rol)) {
+      return res.status(403).json({ message: 'Acceso denegado: permisos insuficientes' });
     }
     next();
   };
 }
 
-export default {
-  generarToken,
-  verificarToken,
-  verificarTokenOpcional,
-  soloClientes,
-  soloEmpleados,
-  requiereRol
-};
+export default { generarToken, verificarToken, verificarTokenOpcional, requiereRol };

@@ -3,9 +3,11 @@ import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ChevronLeft, ChevronRight, Disc3, Guitar, ShoppingBag, Percent, ArrowRight, Star, Mail } from 'lucide-react'
 import { mockProducts, mockBanners, formatPrice } from '../data/mockData'
+import type { MockArticle } from '../data/mockData'
 import WebpImage from '../components/ui/WebpImage'
 import { getNewsCoverImage, NEWS_FALLBACK_IMAGE } from '../utils/newsImage'
 import SEOMeta from '../components/ui/SEOMeta'
+import { getArticles } from '../services/api'
 
 const categories = [
   { name: 'Música', icon: Disc3, link: '/tienda/musica', color: 'from-purple-900 to-groove-purple' },
@@ -23,7 +25,6 @@ function HeroBanner() {
   }, [])
 
   const banner = mockBanners[current]
-  const mobileUrl = `${banner.imageUrl}${banner.imageUrl.includes('?') ? '&' : '?'}w=600&fm=webp`
   const desktopUrl = `${banner.imageUrl}${banner.imageUrl.includes('?') ? '&' : '?'}w=1200&fm=webp`
 
   return (
@@ -127,22 +128,21 @@ function ProductCardMini({ product }: { product: typeof mockProducts[0] }) {
 export default function Home() {
   const featuredProducts = mockProducts.filter(p => p.isFeatured)
   const offerProducts = mockProducts.filter(p => p.isOnOffer)
-  const [newsArticles, setNewsArticles] = useState<HomeArticle[]>([])
+  const [newsArticles, setNewsArticles] = useState<MockArticle[]>([])
 
   useEffect(() => {
-    const newsRef = collection(db, 'news')
-    const q = query(newsRef, orderBy('createdAt', 'desc'), limit(4))
-
-    const unsubscribe = onSnapshot(q, snapshot => {
-      const articles = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as HomeArticle))
-
-      setNewsArticles(articles)
-    })
-
-    return () => unsubscribe()
+    let cancelled = false
+    getArticles()
+      .then(data => {
+        if (!cancelled) setNewsArticles(data.slice(0, 4))
+      })
+      .catch(err => {
+        console.error('Error cargando noticias:', err)
+        if (!cancelled) setNewsArticles([])
+      })
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   const featuredArticle = newsArticles[0]
@@ -202,7 +202,7 @@ export default function Home() {
             <Link to={`/noticias/${featuredArticle.slug}`}
               className="group relative rounded-2xl overflow-hidden h-[220px] md:h-[400px]">
               <img
-                src={getNewsCoverImage(featuredArticle.coverImage)}
+                src={getNewsCoverImage(featuredArticle.coverImageUrl)}
                 alt={featuredArticle.title}
                 width={1200}
                 height={500}
@@ -225,7 +225,7 @@ export default function Home() {
                 <Link key={article.id} to={`/noticias/${article.slug}`}
                   className="group flex gap-4 bg-groove-bg-secondary rounded-xl p-4 border border-white/5 hover:border-groove-gold/20 transition-all">
                   <img
-                    src={getNewsCoverImage(article.coverImage)}
+                    src={getNewsCoverImage(article.coverImageUrl)}
                     alt={article.title}
                     width={112}
                     height={112}
