@@ -1,0 +1,19 @@
+# Groove Music Store - SEO Configuration
+# Allow search engines to crawl main public pages
+
+User-agent: *
+Allow: /
+
+# Disallow admin and personal account flows
+Disallow: /admin
+Disallow: /cuenta
+Disallow: /login
+Disallow: /registro
+Disallow: /checkout
+
+# Disallow Firebase internal paths
+Disallow: /__/
+Disallow: /_/
+
+# Sitemap
+Sitemap: https://groove-store.com/sitemap.xml

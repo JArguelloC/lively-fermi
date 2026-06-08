@@ -5,17 +5,17 @@ export default function Footer() {
   return (
     <footer className="bg-groove-bg-secondary border-t border-white/5 pt-12 pb-8 mt-16">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
-          <div className="col-span-1 md:col-span-2">
-            <img src="/logo.png" alt="Groove Logo" className="h-12 mb-4" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 mb-8">
+          <div className="col-span-1 sm:col-span-2 lg:col-span-2">
+            <img src="/logo.png" srcSet="/logo.png 48w, /logo.png 72w" sizes="(max-width: 640px) 32px, 48px" alt="Groove Logo" width={48} height={48} loading="lazy" className="h-12 w-auto mb-4" />
             <p className="text-groove-text-secondary max-w-sm mb-6">
               Tu tienda especializada en música, vinilos, instrumentos y la mejor cultura musical.
             </p>
             <div className="flex gap-4">
-              <a href="https://www.instagram.com/groov_eec?igsh=ZTc3eHBqaHlqa3o1" target="_blank" rel="noopener noreferrer" className="bg-white/5 p-2 rounded-full hover:bg-groove-gold hover:text-black transition-colors">
+              <a href="https://www.instagram.com/groov_eec?igsh=ZTc3eHBqaHlqa3o1" target="_blank" rel="noopener noreferrer" className="bg-white/5 p-2 rounded-full hover:bg-groove-gold hover:text-black transition-colors" aria-label="Instagram">
                 <Instagram className="w-5 h-5" />
               </a>
-              <a href="https://wa.me/qr/R5F66LK4XA2JI1" target="_blank" rel="noopener noreferrer" className="bg-white/5 p-2 rounded-full hover:bg-groove-gold hover:text-black transition-colors">
+              <a href="https://wa.me/qr/R5F66LK4XA2JI1" target="_blank" rel="noopener noreferrer" className="bg-white/5 p-2 rounded-full hover:bg-groove-gold hover:text-black transition-colors" aria-label="WhatsApp">
                 <MessageCircle className="w-5 h-5" />
               </a>
             </div>

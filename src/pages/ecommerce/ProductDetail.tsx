@@ -1,303 +1,395 @@
-import { useState, useEffect } from 'react'
-import { useParams, Link, useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
-import { ShoppingCart, Heart, Star, ChevronRight, Truck, ShieldCheck, CheckCircle } from 'lucide-react'
-import { formatPrice } from '../../data/mockData'
-import { useCartStore } from '../../store/cartStore'
-import { useAuthStore } from '../../store/authStore'
-import { db } from '../../services/firebase'
-import { collection, query, where, getDocs, onSnapshot, Query } from 'firebase/firestore'
-
-interface Product {
-  id: string
-  name: string
-  slug: string
-  artist?: string
-  brand?: string
-  price: number
-  compareAtPrice?: number
-  stock: number
-  images: string[]
-  description: string
-  category: string
-  subcategory: string
-  avgRating?: number
-  reviewCount?: number
-  onSale?: boolean
-  discountPrice?: number
-}
+import { useState, useEffect, useRef } from 'react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
+import { ShoppingCart, Heart, Star, ChevronRight, Truck, ShieldCheck, CheckCircle } from 'lucide-react';
+import { useCartStore } from '../../store/cartStore';
+import { useAuthStore } from '../../store/authStore';
+import { useFavoritesStore } from '../../store/favoritesStore';
+import { useUiStore } from '../../store/uiStore';
+import { db } from '../../services/firebase';
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import { formatPrice } from '../../utils/formatPrice';
+import { Product, ProductVariant } from '../../types/product.types';
+import { ProductCard } from '../../components/ecommerce/ProductCard';
+import WebpImage from '../../components/ui/WebpImage';
+import SEOMeta from '../../components/ui/SEOMeta';
 
 export default function ProductDetail() {
-  const { slug } = useParams<{ slug: string }>()
-  const addItem = useCartStore(state => state.addItem)
-  
-  const [product, setProduct] = useState<Product | null>(null)
-  const [relatedProducts, setRelatedProducts] = useState<Product[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [qty, setQty] = useState(1)
-  const [selectedImage, setSelectedImage] = useState(0)
-  const [added, setAdded] = useState(false)
-  const isAuthenticated = useAuthStore(state => state.isAuthenticated)
-  const navigate = useNavigate()
+  const { slug } = useParams<{ slug: string }>();
+  const addItem = useCartStore(state => state.addItem);
+  const { currentUser: user, isAuthenticated } = useAuthStore(state => ({ currentUser: state.currentUser, isAuthenticated: state.isAuthenticated }));
+  const { isFavorite, toggleFavorite, loadFavorites, isTogglingFavorite } = useFavoritesStore();
+  const addNotification = useUiStore((state) => state.addNotification);
+  const navigate = useNavigate();
 
-  // Cargar producto desde Firestore
+  const [product, setProduct] = useState<Product | null>(null);
+  const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(null);
+  const [relatedProducts, setRelatedProducts] = useState<Product[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [qty, setQty] = useState(1);
+  const [selectedImage, setSelectedImage] = useState(0);
+  const [added, setAdded] = useState(false);
+  const [stockMessage, setStockMessage] = useState('');
+  const stockMessageTimerRef = useRef<number | null>(null);
+
+  const showStockMessage = (message: string) => {
+    setStockMessage(message);
+    if (stockMessageTimerRef.current) {
+      window.clearTimeout(stockMessageTimerRef.current);
+    }
+    stockMessageTimerRef.current = window.setTimeout(() => {
+      setStockMessage('');
+      stockMessageTimerRef.current = null;
+    }, 3000);
+  };
+
   useEffect(() => {
-    if (!slug) return
-
     const loadProduct = async () => {
+      if (!slug) return;
+      setIsLoading(true);
+      setStockMessage('');
+      
+      const productsRef = collection(db, "products");
+      const q = query(productsRef, where("slug", "==", slug));
+      
       try {
-        const productsRef = collection(db, 'products')
-        const q = query(productsRef, where('slug', '==', slug))
-        const snapshot = await getDocs(q)
+        const querySnapshot = await getDocs(q);
+        if (!querySnapshot.empty) {
+          const productDoc = querySnapshot.docs[0];
+          const rawProductData = productDoc.data() as Record<string, any>;
+          const productData = { id: productDoc.id, ...rawProductData } as Product;
+          const normalizedProduct: Product = {
+            ...productData,
+            title: rawProductData.title ?? rawProductData.name ?? productData.title ?? 'Producto',
+            description: rawProductData.description ?? rawProductData.summary ?? productData.description ?? '',
+            basePrice: rawProductData.basePrice ?? rawProductData.price ?? productData.basePrice ?? 0,
+            avgRating: rawProductData.avgRating ?? productData.avgRating ?? 0,
+            reviewCount: rawProductData.reviewCount ?? productData.reviewCount ?? 0,
+            images: Array.isArray(rawProductData.images) && rawProductData.images.length > 0
+              ? rawProductData.images
+              : rawProductData.image
+                ? [rawProductData.image]
+                : Array.isArray(productData.images) && productData.images.length > 0
+                  ? productData.images
+                  : ['/images/placeholder.svg'],
+            category: rawProductData.category ?? productData.category ?? 'merch',
+            variants: Array.isArray(rawProductData.variants) && rawProductData.variants.length > 0
+              ? rawProductData.variants
+              : Array.isArray(productData.variants)
+                ? productData.variants
+                : [],
+            createdAt: rawProductData.createdAt ?? productData.createdAt ?? new Date().toISOString(),
+            updatedAt: rawProductData.updatedAt ?? productData.updatedAt ?? new Date().toISOString(),
+            isActive: rawProductData.isActive ?? productData.isActive ?? true,
+          } as Product;
+          setProduct(normalizedProduct);
 
-        if (!snapshot.empty) {
-          const doc = snapshot.docs[0]
-          const productData = { id: doc.id, ...doc.data() } as Product
-          setProduct(productData)
-          setQty(1)
-          setSelectedImage(0)
-          setAdded(false)
+          const fallbackVariant: ProductVariant = {
+            id: normalizedProduct.id,
+            name: normalizedProduct.title || rawProductData.name || 'Producto',
+            sku: rawProductData.sku || normalizedProduct.id,
+            price: rawProductData.price ?? rawProductData.basePrice ?? normalizedProduct.basePrice ?? 0,
+            stock: rawProductData.stock ?? 0,
+            attributes: rawProductData.attributes || {},
+          };
 
-          // Cargar productos relacionados
-          const relatedQuery = query(productsRef, where('category', '==', productData.category))
-          const unsubscribe = onSnapshot(relatedQuery, (relSnapshot) => {
-            const related = relSnapshot.docs
-              .map(doc => ({ id: doc.id, ...doc.data() } as Product))
-              .filter(p => p.id !== productData.id)
-              .slice(0, 4)
-            setRelatedProducts(related)
-          })
-
-          // Suscribirse a cambios en tiempo real del producto actual
-          const productRef = snapshot.docs[0].ref
-          const productUnsubscribe = onSnapshot(productRef, (doc) => {
-            if (doc.exists()) {
-              setProduct({ id: doc.id, ...doc.data() } as Product)
-            }
-          })
-
-          setIsLoading(false)
-          return () => {
-            unsubscribe()
-            productUnsubscribe()
+          if (Array.isArray(productData.variants) && productData.variants.length > 0) {
+            setSelectedVariant(productData.variants[0]);
+          } else {
+            setSelectedVariant(fallbackVariant);
           }
+
+          if (user) {
+            await loadFavorites(user.uid);
+          }
+          loadRelatedProducts(productData.category, productData.id);
         } else {
-          setProduct(null)
-          setIsLoading(false)
+          setProduct(null);
         }
-      } catch (err) {
-        console.error('Error cargando producto:', err)
-        setProduct(null)
-        setIsLoading(false)
+      } catch (error) {
+        console.error("Error fetching product:", error);
+        setProduct(null);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    const loadRelatedProducts = async (category: string, currentProductId: string) => {
+      const productsRef = collection(db, "products");
+      const q = query(productsRef, where("category", "==", category));
+      
+      try {
+        const querySnapshot = await getDocs(q);
+        const related = querySnapshot.docs
+          .map(doc => ({ id: doc.id, ...doc.data() } as Product))
+          .filter(p => p.id !== currentProductId);
+        setRelatedProducts(related.slice(0, 5));
+      } catch (error) {
+        console.error("Error fetching related products:", error);
+      }
+    };
+
+    loadProduct();
+    window.scrollTo(0, 0);
+  }, [slug, user, loadFavorites]);
+
+  const handleAddToCart = async () => {
+    if (product && selectedVariant) {
+      if (qty > selectedVariant.stock) {
+        showStockMessage(`Solo hay ${selectedVariant.stock} unidades disponibles.`);
+        setQty(selectedVariant.stock);
+        return;
+      }
+      const addedSuccessfully = await addItem({
+        id: `${product.id}-${selectedVariant.id}`,
+        productId: product.id,
+        variantId: selectedVariant.id,
+        name: product.title,
+        price: selectedVariant.price,
+        quantity: qty,
+        images: product.images,
+        artist: product.artist,
+        slug: product.slug,
+      }, qty);
+
+      if (addedSuccessfully) {
+        setAdded(true);
+        addNotification({ message: `${product.title || 'Producto'} añadido al carrito${!isAuthenticated ? ' (invitado)' : ''}`, type: 'success' })
+        setTimeout(() => setAdded(false), 2000);
       }
     }
+  };
 
-    loadProduct()
-  }, [slug])
+  const handleToggleFavorite = async () => {
+    if (!isAuthenticated || !user || !product) {
+      navigate('/login');
+      return;
+    }
+    const wasFavorite = isFavorite(product.id);
+    try {
+      await toggleFavorite(user.uid, product.id);
+      if (!wasFavorite) {
+        addNotification({
+          message: `${product.title || 'Producto'} añadido a favoritos`,
+          type: 'success',
+        });
+      } else {
+        addNotification({
+          message: `${product.title || 'Producto'} eliminado de favoritos`,
+          type: 'info',
+        });
+      }
+    } catch (error) {
+      console.error("Error toggling favorite:", error);
+    }
+  };
+
+  const handleQtyChange = (value: string) => {
+    if (!selectedVariant) return;
+    const newQty = parseInt(value, 10);
+    if (isNaN(newQty) || newQty < 1) {
+      setQty(1);
+    } else if (newQty > selectedVariant.stock) {
+      setQty(selectedVariant.stock);
+      showStockMessage(`Solo hay ${selectedVariant.stock} unidades disponibles.`);
+    } else {
+      setQty(newQty);
+    }
+  };
 
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-groove-bg-primary">
-        <div className="animate-spin text-4xl">⏳</div>
+        <div className="w-16 h-16 border-4 border-groove-gold border-t-transparent rounded-full animate-spin"></div>
       </div>
-    )
+    );
   }
 
-  if (!product) {
+  if (!product || !selectedVariant) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-xl font-bold bg-groove-bg-primary">
+      <div className="min-h-screen flex items-center justify-center bg-groove-bg-primary text-white">
         <div className="text-center">
-          <p className="mb-4">Producto no encontrado</p>
-          <Link to="/tienda" className="text-groove-gold hover:underline">← Volver a la tienda</Link>
+          <h2 className="text-2xl font-bold mb-4">Producto no encontrado</h2>
+          <Link to="/tienda" className="text-groove-gold hover:underline">
+            Volver a la tienda
+          </Link>
         </div>
       </div>
-    )
+    );
   }
-
-  const handleQtyChange = (val: string) => {
-    let num = parseInt(val)
-    if (isNaN(num) || num < 1) num = 1
-    if (num > product.stock) num = product.stock
-    setQty(num)
-  }
-
-  const handleAddToCart = async () => {
-    if (!isAuthenticated) {
-      navigate('/login')
-      return
-    }
-
-    await addItem({ 
-      id: product.id, 
-      name: product.name, 
-      price: product.price, 
-      quantity: qty, 
-      images: product.images,
-      artist: product.artist,
-      brand: product.brand,
-      slug: product.slug
-    })
-    
-    setAdded(true)
-    setTimeout(() => setAdded(false), 3000)
-  }
-
-  const handleFavoriteClick = () => {
-    if (!isAuthenticated) {
-      navigate('/login')
-    } else {
-      alert("Producto añadido a favoritos.")
-    }
-  }
-
-  // Calcular precio con descuento si está en oferta
-  const displayPrice = product.onSale ? product.discountPrice : product.price
-  const compareAtPrice = product.onSale ? product.price : null
+  
+  const stock = selectedVariant.stock;
+  const price = selectedVariant.price;
 
   return (
-    <div className="min-h-screen bg-groove-bg-primary py-8">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        
-        {/* Breadcrumbs */}
-        <nav className="flex items-center text-sm text-groove-text-secondary mb-8">
-          <Link to="/" className="hover:text-white transition-colors">Inicio</Link>
-          <ChevronRight className="w-4 h-4 mx-2" />
-          <Link to={`/tienda/${product.category}`} className="hover:text-white transition-colors capitalize">{product.category}</Link>
-          <ChevronRight className="w-4 h-4 mx-2" />
-          <span className="text-white truncate">{product.name}</span>
-        </nav>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-          {/* Gallery */}
+    <>
+      <SEOMeta 
+        title={product.title}
+        description={`${product.title} - ${product.artist || product.category}. ${product.description || 'Producto de alta calidad de Groove Music Store. Compra ahora con envío rápido.'}`}
+        ogImage={product.images?.[0] || 'https://groove-store.com/og-image.png'}
+      />
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="min-h-screen bg-groove-bg-primary text-groove-text-primary pt-24 pb-12"
+    >
+      <div className="container mx-auto px-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Image Gallery */}
           <div className="space-y-4">
-            <div className="aspect-square bg-groove-bg-secondary rounded-2xl overflow-hidden border border-white/5 relative">
-              <motion.img 
-                key={selectedImage}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                src={product.images[selectedImage] || ''} 
-                alt={product.name} 
+            <motion.div 
+              key={selectedImage}
+              initial={{ opacity: 0.5 }}
+              animate={{ opacity: 1 }}
+              className="aspect-square rounded-2xl overflow-hidden border-2 border-groove-gold/20"
+            >
+              <WebpImage
+                src={product.images[selectedImage]}
+                alt={`${product.title} - imagen ${selectedImage + 1}`}
+                width={600}
+                height={600}
+                sizes="(max-width: 640px) 100vw, 600px"
+                loading="lazy"
                 className="w-full h-full object-cover"
               />
-              {product.onSale && (
-                <div className="absolute top-4 left-4 bg-red-500 text-white font-bold px-3 py-1 rounded-full text-sm">
-                  OFERTA
-                </div>
-              )}
-            </div>
-            {product.images && product.images.length > 1 && (
-              <div className="grid grid-cols-4 gap-4">
-                {product.images.map((img, idx) => (
-                  <button 
-                    key={idx} 
-                    onClick={() => setSelectedImage(idx)}
-                    className={`aspect-square rounded-xl overflow-hidden border-2 transition-all ${selectedImage === idx ? 'border-groove-gold' : 'border-transparent opacity-60 hover:opacity-100'}`}
-                  >
-                    <img src={img} alt="" className="w-full h-full object-cover" />
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Info */}
-          <div>
-            <div className="mb-6">
-              <p className="text-groove-gold font-bold mb-2">{product.artist || product.brand}</p>
-              <h1 className="text-3xl sm:text-4xl font-display font-extrabold mb-4 leading-tight">{product.name}</h1>
-              
-              <div className="flex items-center gap-4 text-sm text-groove-text-secondary mb-6">
-                <div className="flex items-center text-amber-500">
-                  <Star className="w-4 h-4 fill-current" />
-                  <span className="font-bold ml-1">{product.avgRating || 0}</span>
-                </div>
-                <span>({product.reviewCount || 0} reseñas)</span>
-                <span className="capitalize border border-white/10 px-2 py-1 rounded">{product.subcategory}</span>
-              </div>
-
-              <div className="flex items-end gap-3 mb-6">
-                <span className="text-4xl font-bold">{formatPrice(displayPrice || 0)}</span>
-                {compareAtPrice && <span className="text-xl text-groove-text-secondary line-through mb-1">{formatPrice(compareAtPrice)}</span>}
-              </div>
-            </div>
-
-            <div className="text-groove-text-secondary leading-relaxed mb-8 space-y-4">
-              {product.description && product.description.split('\n').map((paragraph, idx) => (
-                <p key={idx}>{paragraph}</p>
+            </motion.div>
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+              {product.images.map((img, i) => (
+                <button
+                  key={i}
+                  onClick={() => setSelectedImage(i)}
+                  className={`aspect-square rounded-lg overflow-hidden border-2 transition-all ${
+                    selectedImage === i ? 'border-groove-gold' : 'border-transparent hover:border-groove-gold/50'
+                  }`}
+                >
+                  <WebpImage
+                    src={img}
+                    alt={`thumbnail ${i}`}
+                    width={120}
+                    height={120}
+                    sizes="(max-width: 640px) 100vw, 120px"
+                    loading="lazy"
+                    className="w-full h-full object-cover"
+                  />
+                </button>
               ))}
             </div>
+          </div>
 
-            <div className="bg-groove-bg-secondary border border-white/5 rounded-2xl p-6 mb-8">
-              {product.stock <= 5 && product.stock > 0 && (
-                <div className="text-red-400 font-bold text-sm mb-4 flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-                  📦 ¡Solo quedan {product.stock} en stock!
+          {/* Product Info */}
+          <div className="space-y-6">
+            <div>
+              <Link to={`/tienda/${product.category}`} className="text-sm text-groove-gold hover:underline">{product.category}</Link>
+              <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-white">{product.title}</h1>
+              {product.artist && <p className="text-xl text-groove-text-secondary">{product.artist}</p>}
+            </div>
+
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-1 text-groove-gold">
+                {[...Array(5)].map((_, i) => (
+                  <Star key={i} className={`w-5 h-5 ${i < Math.round(product.avgRating ?? 0) ? 'fill-current' : 'text-gray-500'}`} />
+                ))}
+              </div>
+              <span className="text-sm text-groove-text-secondary">({product.reviewCount ?? 0} reseñas)</span>
+            </div>
+
+            <div className="text-3xl font-bold flex items-baseline gap-3">
+              <span>{formatPrice(price)}</span>
+            </div>
+
+            <p className="text-groove-text-secondary leading-relaxed">{product.description}</p>
+
+            {stock <= 0 ? (
+              <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm font-medium text-red-300">
+                Ya no hay stock disponible para este producto.
+              </div>
+            ) : (
+              <p className="text-sm text-green-400">En stock: {stock} unidades</p>
+            )}
+
+            <div className="bg-groove-bg-secondary border border-groove-gold/20 rounded-xl p-4 space-y-4">
+              {stockMessage && (
+                <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+                  {stockMessage}
                 </div>
               )}
-              
-              <div className="flex items-end gap-4 mb-6">
-                <div>
-                  <label className="block text-xs text-groove-text-secondary mb-2 font-medium">CANTIDAD</label>
-                  <div className="flex items-center bg-groove-bg-primary rounded-xl border border-white/10 overflow-hidden h-12 w-32">
-                    <button onClick={() => handleQtyChange(String(qty - 1))} className="flex-1 hover:text-groove-gold transition-colors text-lg font-medium">-</button>
-                    <input 
-                      type="text" 
-                      value={qty} 
-                      onChange={(e) => handleQtyChange(e.target.value)}
-                      className="w-10 text-center bg-transparent focus:outline-none font-bold"
-                    />
-                    <button onClick={() => handleQtyChange(String(qty + 1))} className="flex-1 hover:text-groove-gold transition-colors text-lg font-medium">+</button>
-                  </div>
+
+              <div className="flex items-center gap-4">
+                <div className="flex items-center border border-groove-gold/30 rounded-lg">
+                  <button onClick={() => handleQtyChange(String(qty - 1))} className="px-4 py-2 text-lg">-</button>
+                  <input 
+                    type="number"
+                    value={qty}
+                    onChange={(e) => handleQtyChange(e.target.value)}
+                    className="w-16 text-center bg-transparent focus:outline-none"
+                    max={stock}
+                  />
+                  <button onClick={() => handleQtyChange(String(qty + 1))} className="px-4 py-2 text-lg">+</button>
                 </div>
                 <button 
                   onClick={handleAddToCart}
-                  disabled={product.stock === 0}
-                  className={`flex-1 h-12 flex items-center justify-center gap-2 font-bold rounded-xl transition-all ${
-                    added ? 'bg-green-500 text-white' : 
-                    product.stock === 0 ? 'bg-white/5 text-white/30 cursor-not-allowed' : 
-                    'bg-groove-gold hover:bg-groove-gold-light text-black hover:scale-[1.02]'
+                  disabled={stock === 0}
+                  className={`w-full py-3 px-6 rounded-lg font-bold flex items-center justify-center gap-2 transition-all duration-300 transform ${
+                    stock === 0
+                      ? 'bg-gray-500 cursor-not-allowed text-white'
+                      : added
+                      ? 'bg-groove-gold text-black shadow-[0_12px_30px_-15px_rgba(212,175,55,0.8)] hover:bg-groove-gold-light hover:-translate-y-0.5'
+                      : 'bg-groove-gold text-black shadow-[0_10px_30px_-18px_rgba(212,175,55,0.8)] hover:bg-groove-gold-light hover:-translate-y-0.5'
                   }`}
                 >
-                  {added ? <><CheckCircle className="w-5 h-5" /> ¡Añadido!</> : 
-                   product.stock === 0 ? 'Agotado' : <><ShoppingCart className="w-5 h-5" /> Agregar al Carrito</>}
-                </button>
-                <button onClick={handleFavoriteClick} className="h-12 w-12 flex items-center justify-center bg-white/5 hover:bg-white/10 rounded-xl transition-colors text-groove-text-secondary hover:text-red-500">
-                  <Heart className="w-5 h-5" />
+                  {stock === 0 ? 'Agotado' : added ? (
+                    <>
+                      <CheckCircle className="w-5 h-5" />
+                      Agregado
+                    </>
+                  ) : (
+                    <>
+                      <ShoppingCart className="w-5 h-5" />
+                      Añadir al Carrito
+                    </>
+                  )}
                 </button>
               </div>
-
-              <div className="space-y-3 text-sm text-groove-text-secondary">
-                <p className="flex items-center gap-2"><Truck className="w-4 h-4 text-groove-gold" /> Envío gratis en pedidos sobre $5,000 MXN</p>
-                <p className="flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-groove-gold" /> Garantía Groove de 30 días</p>
+              <button 
+                onClick={handleToggleFavorite}
+                disabled={isTogglingFavorite}
+                className={`w-full flex items-center justify-center gap-2 text-sm transition-colors ${
+                  product && isFavorite(product.id) ? 'text-groove-gold hover:text-groove-gold/80' : 'text-groove-text-secondary hover:text-groove-gold'
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                <Heart className={`w-4 h-4 ${
+                  product && isFavorite(product.id) ? 'fill-current text-groove-gold' : ''
+                }`} />
+                {product && isFavorite(product.id) ? 'Quitar de favoritos' : 'Añadir a favoritos'}
+              </button>
+            </div>
+            <div className="space-y-2 text-sm">
+              <div className="flex items-center gap-2">
+                <Truck className="w-5 h-5 text-groove-gold" />
+                <span>Envío rápido y seguro a todo el país.</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-groove-gold" />
+                <span>Compra protegida, recibe el producto que esperabas o te devolvemos tu dinero.</span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Related Products Section */}
+        {/* Related Products */}
         {relatedProducts.length > 0 && (
-          <div className="mt-20 pt-10 border-t border-white/5">
-            <h2 className="text-3xl font-display font-bold mb-8 text-center">Productos similares que te podrían interesar</h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
-              {relatedProducts.map(p => (
-                <Link key={p.id} to={`/producto/${p.slug}`}
-                  className="group bg-groove-bg-secondary rounded-2xl overflow-hidden border border-white/5 hover:border-groove-gold/30 transition-all hover:-translate-y-1">
-                  <div className="relative aspect-square overflow-hidden">
-                    <img src={p.images?.[0] || ''} alt={p.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" loading="lazy" />
-                  </div>
-                  <div className="p-4">
-                    <h4 className="font-semibold text-sm leading-tight mb-2 line-clamp-2">{p.name}</h4>
-                    <div className="flex items-center gap-2">
-                      <span className="text-groove-gold font-bold">{formatPrice(p.price)}</span>
-                    </div>
-                  </div>
-                </Link>
-              ))}
+          <div className="mt-16">
+            <h3 className="text-2xl font-bold mb-6 flex items-center gap-2">
+              Productos Relacionados <ChevronRight />
+            </h3>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+              {relatedProducts.map(p => <ProductCard key={p.id} product={p} showAddToCart={false} />)}
             </div>
           </div>
         )}
       </div>
-    </div>
-  )
+    </motion.div>
+    </>
+  );
 }
 

@@ -21,8 +21,8 @@ export default {
         },
       },
       fontFamily: {
-        'display': ['Inter', 'sans-serif'],
-        'body': ['Inter', 'sans-serif'],
+        'display': ['DM Sans', 'sans-serif'],
+        'body': ['DM Sans', 'sans-serif'],
       },
     },
   },

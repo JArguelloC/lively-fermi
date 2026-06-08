@@ -8,6 +8,8 @@ import { useAuthStore } from '../../store/authStore'
 import { db } from '../../services/firebase'
 import { collection, query, where, onSnapshot, QuerySnapshot, DocumentData } from 'firebase/firestore'
 import { fixProductImages } from '../../services/fixProductImages'
+import WebpImage from '../../components/ui/WebpImage'
+import SEOMeta from '../../components/ui/SEOMeta'
 
 interface Product {
   id: string
@@ -79,11 +81,9 @@ export default function CategoryPage() {
         // Asegurar que SIEMPRE haya imágenes
         const images = data.images && Array.isArray(data.images) && data.images.length > 0 
           ? data.images 
-          : [data.image || 'https://images.unsplash.com/photo-1611002214172-792c1f90b59a?w=800&h=800&fit=crop']
+          : [data.image || '/images/placeholder.svg']
         return { ...data, images } as Product
       })
-      console.log(`✅ ${categoryKey} cargado: ${docs.length} productos`)
-      docs.forEach(p => console.log(`  - ${p.name}: ${p.images?.[0]?.substring(0, 50) || 'SIN IMAGEN'}`))
       setAllProducts(docs)
     })
     
@@ -124,24 +124,37 @@ export default function CategoryPage() {
     }
   })
 
+  const categoryTitle = categoryKey ? categoryNames[categoryKey] : 'Toda la Tienda'
+  const categoryDesc: Record<string, string> = {
+    music: 'Descubre nuestra colección de música: discos de vinilo, CDs, vinyls edición limitada y más. Artistas clásicos y modernos con envío rápido.',
+    merch: 'Merchandising oficial de tus artistas favoritos: camisetas, gorras, accesorios y más. Productos auténticos certificados.',
+    instruments: 'Instrumentos musicales de calidad: guitarras, sintetizadores, accesorios y equipos para músicos profesionales y principiantes.',
+    offers: 'Ofertas especiales y descuentos exclusivos en toda nuestra tienda. Productos seleccionados con hasta 50% de descuento.',
+  }
+
   return (
-    <div className="min-h-screen max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <>
+      <SEOMeta 
+        title={categoryTitle}
+        description={categoryDesc[categoryKey] || 'Explorar nuestro catálogo completo de música, instrumentos y merchandising.'}
+      />
+    <div className="min-h-screen max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 overflow-x-hidden">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-4xl font-display font-extrabold mb-2">
+      <div className="mb-6 sm:mb-8">
+        <h1 className="text-3xl sm:text-4xl font-display font-extrabold mb-2 leading-tight">
           {categoryKey ? categoryNames[categoryKey] : 'Toda la Tienda'}
         </h1>
-        <p className="text-groove-text-secondary">{products.length} productos encontrados</p>
+        <p className="text-sm sm:text-base text-groove-text-secondary">{products.length} productos encontrados</p>
       </div>
 
       {/* Controls */}
-      <div className="flex items-center justify-between mb-6 gap-4">
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <button onClick={() => setShowFilters(!showFilters)}
-          className="flex items-center gap-2 bg-groove-bg-secondary px-5 py-2.5 rounded-full border border-white/10 text-sm font-medium hover:border-groove-gold/30 transition-colors lg:hidden">
+          className="flex w-full sm:w-auto items-center justify-center gap-2 bg-groove-bg-secondary px-5 py-2.5 rounded-full border border-white/10 text-sm font-medium hover:border-groove-gold/30 transition-colors lg:hidden">
           <SlidersHorizontal className="w-4 h-4" /> Filtros
         </button>
         <select value={sort} onChange={e => setSort(e.target.value)}
-          className="bg-groove-bg-secondary border border-white/10 rounded-full px-5 py-2.5 text-sm focus:outline-none focus:border-groove-gold transition-colors appearance-none cursor-pointer">
+          className="w-full sm:w-auto bg-groove-bg-secondary border border-white/10 rounded-full px-5 py-2.5 text-sm focus:outline-none focus:border-groove-gold transition-colors appearance-none cursor-pointer min-w-0">
           {sortOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
       </div>
@@ -206,31 +219,98 @@ export default function CategoryPage() {
               className="absolute bottom-0 left-0 right-0 bg-groove-bg-secondary rounded-t-2xl p-6 max-h-[80vh] overflow-y-auto">
               <div className="flex justify-between items-center mb-6">
                 <h3 className="font-bold text-lg">Filtros</h3>
-                <button onClick={() => setShowFilters(false)}><X className="w-6 h-6" /></button>
+                <button onClick={() => setShowFilters(false)} aria-label="Cerrar filtros" className="p-2 rounded-full hover:bg-white/5 transition-colors">
+                  <X className="w-6 h-6" />
+                </button>
               </div>
-              <p className="text-groove-text-secondary text-sm">Filtros disponibles próximamente</p>
+
+              {/* Replicar contenido del sidebar para móviles (controles interactivos) */}
+              <div className="space-y-6">
+                <div className="bg-groove-bg-secondary rounded-xl p-4 border border-white/5">
+                  <h4 className="font-bold mb-3 text-sm uppercase tracking-wider text-groove-text-secondary">Categorías</h4>
+                  <div className="space-y-2">
+                    {Object.entries(categoryNames).map(([key, name]) => (
+                      <Link key={key} to={`/tienda/${Object.keys(categoryMap).find(k => categoryMap[k] === key)}`}
+                        onClick={() => setShowFilters(false)}
+                        className={`block px-3 py-2 rounded-lg text-sm transition-colors ${categoryKey === key ? 'bg-groove-gold/10 text-groove-gold font-medium' : 'text-groove-text-secondary hover:text-white hover:bg-white/5'}`}>
+                        {name}
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="bg-groove-bg-secondary rounded-xl p-4 border border-white/5">
+                  <h4 className="font-bold mb-3 text-sm uppercase tracking-wider text-groove-text-secondary">Precio</h4>
+                  <div className="space-y-2 text-sm">
+                    {['Menos de $20', '$20 - $50', '$50 - $100', 'Más de $100'].map(range => (
+                      <label key={range} className="flex items-center gap-2 text-groove-text-secondary hover:text-white cursor-pointer">
+                        <input type="checkbox" className="accent-groove-gold rounded" checked={selectedPrices.includes(range)} onChange={() => togglePrice(range)} /> {range}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {categoryKey === 'music' && (
+                  <div className="bg-groove-bg-secondary rounded-xl p-4 border border-white/5">
+                    <h4 className="font-bold mb-3 text-sm uppercase tracking-wider text-groove-text-secondary">Género</h4>
+                    <div className="space-y-2 text-sm">
+                      {['Rock', 'Jazz', 'Electronic', 'Pop', 'Hip-Hop', 'Classical', 'Metal', 'Indie'].map(g => (
+                        <label key={g} className="flex items-center gap-2 text-groove-text-secondary hover:text-white cursor-pointer">
+                          <input type="checkbox" className="accent-groove-gold rounded" checked={selectedGenres.includes(g)} onChange={() => toggleGenre(g)} /> {g}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="bg-groove-bg-secondary rounded-xl p-4 border border-white/5">
+                  <h4 className="font-bold mb-3 text-sm uppercase tracking-wider text-groove-text-secondary">Calificación</h4>
+                  <div className="space-y-2 text-sm">
+                    {[4, 3, 2].map(s => (
+                      <label key={s} className="flex items-center gap-2 text-groove-text-secondary hover:text-white cursor-pointer">
+                        <input type="checkbox" className="accent-groove-gold rounded" checked={selectedRatings.includes(s)} onChange={() => toggleRating(s)} />
+                        <span className="flex items-center gap-0.5">{[1,2,3,4,5].map(i => <Star key={i} className={`w-3 h-3 ${i <= s ? 'fill-groove-gold text-groove-gold' : 'text-gray-600'}`} />)}</span>
+                        <span>y más</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
             </motion.div>
           </div>
         )}
 
         {/* Product Grid */}
         <div className="flex-1">
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 md:gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
             {products.map((product, i) => (
               <motion.div key={product.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
                 <Link to={`/producto/${product.slug}`}
                   className="group block bg-groove-bg-secondary rounded-2xl overflow-hidden border border-white/5 hover:border-groove-gold/20 transition-all hover:-translate-y-1">
                   <div className="relative aspect-square overflow-hidden">
-                    <img src={product.images?.[0] || 'https://images.unsplash.com/photo-1611002214172-792c1f90b59a?w=800'} alt={product.name}
-                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" loading="lazy" />
+                    <WebpImage
+                      src={product.images?.[0] || '/images/placeholder.svg'}
+                      alt={product.name}
+                      width={400}
+                      height={400}
+                      sizes="(max-width: 640px) 100vw, 400px"
+                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                      loading="lazy"
+                      onError={(e) => {
+                        const img = e.target as HTMLImageElement;
+                        img.src = '/images/placeholder.svg';
+                      }}
+                    />
                     {product.onSale && product.compareAtPrice && (
                       <span className="absolute top-3 left-3 bg-red-600 text-white text-xs font-bold px-2 py-1 rounded-full">
                         -{Math.round((1 - product.price / product.compareAtPrice) * 100)}%
                       </span>
                     )}
-                    {product.stock <= 5 && product.stock > 0 && (
+                    {product.stock <= 0 ? (
+                      <span className="absolute top-3 right-3 bg-red-600 text-white text-xs font-bold px-2 py-1 rounded-full">Sin stock</span>
+                    ) : product.stock <= 5 ? (
                       <span className="absolute top-3 right-3 bg-amber-600 text-white text-xs font-bold px-2 py-1 rounded-full">Poco stock</span>
-                    )}
+                    ) : null}
 
                     <button onClick={(e) => { e.preventDefault(); e.stopPropagation() }}
                       className="absolute top-3 right-3 p-2 bg-black/40 backdrop-blur-sm rounded-full text-white hover:text-groove-gold opacity-0 group-hover:opacity-100 transition-all">
@@ -261,5 +341,6 @@ export default function CategoryPage() {
         </div>
       </div>
     </div>
+    </>
   )
 }

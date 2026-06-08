@@ -1,0 +1,32 @@
+<svg width="1200" height="800" viewBox="0 0 1200 800" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="120" y1="80" x2="1080" y2="720" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0B0B0B"/>
+      <stop offset="0.45" stop-color="#181818"/>
+      <stop offset="1" stop-color="#2A2110"/>
+    </linearGradient>
+    <radialGradient id="glow1" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(270 210) rotate(45) scale(260 240)">
+      <stop stop-color="#D4AF37" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#D4AF37" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glow2" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(930 560) rotate(-30) scale(320 280)">
+      <stop stop-color="#7C3AED" stop-opacity="0.25"/>
+      <stop offset="1" stop-color="#7C3AED" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="800" rx="48" fill="url(#bg)"/>
+  <rect width="1200" height="800" rx="48" fill="url(#glow1)"/>
+  <rect width="1200" height="800" rx="48" fill="url(#glow2)"/>
+  <circle cx="930" cy="170" r="170" fill="#F5D76E" fill-opacity="0.12"/>
+  <circle cx="250" cy="620" r="210" fill="#F5D76E" fill-opacity="0.08"/>
+  <path d="M150 560C330 410 530 390 720 470C885 540 1020 535 1110 470" stroke="#F5D76E" stroke-opacity="0.35" stroke-width="14" stroke-linecap="round"/>
+  <path d="M150 610C330 460 530 440 720 520C885 590 1020 585 1110 520" stroke="#FFFFFF" stroke-opacity="0.12" stroke-width="8" stroke-linecap="round"/>
+  <g opacity="0.95">
+    <rect x="86" y="86" width="220" height="220" rx="32" fill="#D4AF37" fill-opacity="0.12" stroke="#D4AF37" stroke-opacity="0.35"/>
+    <path d="M136 204H256" stroke="#D4AF37" stroke-width="14" stroke-linecap="round"/>
+    <path d="M136 250H226" stroke="#FFFFFF" stroke-opacity="0.55" stroke-width="10" stroke-linecap="round"/>
+    <circle cx="256" cy="252" r="18" fill="#D4AF37"/>
+  </g>
+  <text x="86" y="408" fill="#FFFFFF" fill-opacity="0.92" font-family="Arial, Helvetica, sans-serif" font-size="64" font-weight="700">Groove News</text>
+  <text x="86" y="468" fill="#F5D76E" fill-opacity="0.9" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="600">Contenido destacado</text>
+</svg>

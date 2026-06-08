@@ -1,6 +1,7 @@
 import React from 'react';
 import { ShoppingCart, Play } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import WebpImage from '../ui/WebpImage';
 
 interface BuyAlbumButtonProps {
   albumTitle: string;
@@ -20,7 +21,7 @@ const BuyAlbumButton: React.FC<BuyAlbumButtonProps> = ({
   return (
     <div className="my-8 rounded-2xl bg-gradient-to-br from-zinc-900 to-black border border-zinc-800 p-6 flex flex-col md:flex-row items-center gap-6">
       <div className="w-32 h-32 flex-shrink-0 rounded-xl overflow-hidden shadow-2xl relative group">
-        <img src={coverImage} alt={albumTitle} className="w-full h-full object-cover" />
+        <WebpImage src={coverImage} alt={albumTitle} sizes="128px" className="w-full h-full object-cover" />
         <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
           <Play className="text-white w-10 h-10" fill="currentColor" />
         </div>

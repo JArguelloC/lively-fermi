@@ -16,6 +16,8 @@ import { Heart, MessageSquare, Share2, ShoppingCart, ArrowRight, ChevronRight, C
 import { useCartStore } from '../../store/cartStore'
 import { useAuthStore } from '../../store/authStore'
 import { db } from '../../services/firebase'
+import { getNewsCoverImage, NEWS_FALLBACK_IMAGE } from '../../utils/newsImage'
+import SEOMeta from '../../components/ui/SEOMeta'
 import {
   collection,
   query,
@@ -111,6 +113,8 @@ export default function ArticleDetail() {
   useEffect(() => {
     if (!slug) return
 
+    let unsubscribeFn: (() => void) | null = null
+
     const loadArticle = async () => {
       try {
         setIsLoadingArticle(true)
@@ -128,16 +132,12 @@ export default function ArticleDetail() {
         setArticle(articleData)
         setComments(articleData.comments || [])
 
-        console.log(`📰 Artículo cargado: ${articleData.title}`)
-
-        // Suscribirse a cambios en tiempo real
-        const unsubscribe = onSnapshot(doc.ref, updatedDoc => {
+        // Suscribirse a cambios en tiempo real y guardar la función de limpieza
+        unsubscribeFn = onSnapshot(doc.ref, updatedDoc => {
           const updated = { id: updatedDoc.id, ...updatedDoc.data() } as Article
           setArticle(updated)
           setComments(updated.comments || [])
         })
-
-        return () => unsubscribe()
       } catch (err) {
         console.error('Error cargando artículo:', err)
         setError('Error cargando el artículo')
@@ -147,6 +147,12 @@ export default function ArticleDetail() {
     }
 
     loadArticle()
+
+    return () => {
+      if (typeof unsubscribeFn === 'function') {
+        try { unsubscribeFn() } catch (e) { /* ignore */ }
+      }
+    }
   }, [slug])
 
   // Agregar comentario
@@ -212,13 +218,27 @@ export default function ArticleDetail() {
   }
 
   return (
+    <>
+      <SEOMeta 
+        title={article.title}
+        description={article.excerpt || `${article.title} - Lee el artículo completo en Groove Music Store.`}
+        ogImage={article.coverImage || 'https://groove-store.com/og-image.png'}
+        ogType="article"
+      />
     <div className="min-h-screen bg-groove-bg-primary text-groove-text-primary">
       {/* Cover Image */}
       <div className="relative w-full h-[350px] md:h-[500px] overflow-hidden">
         <img
-          src={article.coverImage || '/images/news/default-cover.jpg'}
+          src={getNewsCoverImage(article.coverImage)}
           alt={article.title}
+          width={1200}
+          height={500}
+          loading="lazy"
           className="w-full h-full object-cover"
+          onError={(e) => {
+            const img = e.target as HTMLImageElement
+            img.src = NEWS_FALLBACK_IMAGE
+          }}
         />
         <div className="absolute inset-0 bg-gradient-to-t from-groove-bg-primary via-groove-bg-primary/30 to-transparent" />
       </div>
@@ -385,5 +405,6 @@ export default function ArticleDetail() {
         <div className="border-t border-groove-gold/20 py-8" />
       </div>
     </div>
+    </>
   )
 }

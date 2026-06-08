@@ -12,6 +12,7 @@ export interface ProductVariant {
 
 export interface Product {
   id: string;
+  slug: string;
   title: string;
   description: string;
   category: ProductCategory;
@@ -20,6 +21,8 @@ export interface Product {
   label?: string;
   releaseDate?: Date | string;
   basePrice: number; // in cents
+  avgRating?: number;
+  reviewCount?: number;
   images: string[]; // URLs
   variants: ProductVariant[];
   createdAt: Date | string;

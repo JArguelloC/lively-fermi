@@ -120,7 +120,8 @@ export async function validateOrderStock(
 
     // Validar cada item en paralelo
     const validationPromises = cartItems.map(async (item) => {
-      const check = await checkProductStockAvailability(item.id, item.quantity)
+      const productId = (item as any).productId || item.id.split('-')[0]
+      const check = await checkProductStockAvailability(productId, item.quantity)
       
       const detail = {
         id: item.id,
@@ -209,7 +210,10 @@ export async function decrementProductStock(
       console.log('📖 FASE 1: Leyendo stock actual de productos...')
 
       const productDocs = await Promise.all(
-        cartItems.map(item => transaction.get(doc(db, 'products', item.id)))
+        cartItems.map(item => {
+          const productId = (item as any).productId || item.id.split('-')[0]
+          return transaction.get(doc(db, 'products', productId))
+        })
       )
 
       const updatesQueue: Array<{
@@ -244,15 +248,16 @@ export async function decrementProductStock(
           )
         }
 
+        const productId = (item as any).productId || item.id
         const newStock = currentStock - item.quantity
         updatesQueue.push({
-          ref: doc(db, 'products', item.id),
+          ref: doc(db, 'products', productId),
           newStock,
           originalStock: currentStock,
           itemName: item.name
         })
 
-        console.log(`✅ Validado: ${item.name} | Stock: ${currentStock} → ${newStock}`)
+        console.log(`✅ Validado: ${item.name} | productId: ${productId} | Stock: ${currentStock} → ${newStock}`)
       }
 
       // ═════════════════════════════════════════════════════════════

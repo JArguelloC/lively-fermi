@@ -16,6 +16,7 @@ import { Heart, MessageSquare, Share2, ShoppingCart, ArrowRight, ChevronRight, C
 import { useCartStore } from '../../store/cartStore'
 import { useAuthStore } from '../../store/authStore'
 import { db } from '../../services/firebase'
+import { getNewsCoverImage, NEWS_FALLBACK_IMAGE } from '../../utils/newsImage'
 import {
   collection,
   query,
@@ -216,9 +217,16 @@ export default function ArticleDetail() {
       {/* Cover Image */}
       <div className="relative w-full h-[350px] md:h-[500px] overflow-hidden">
         <img
-          src={article.coverImage || '/images/news/default-cover.jpg'}
+          src={getNewsCoverImage(article.coverImage)}
           alt={article.title}
+          width={1200}
+          height={500}
+          loading="lazy"
           className="w-full h-full object-cover"
+          onError={(e) => {
+            const img = e.target as HTMLImageElement
+            img.src = NEWS_FALLBACK_IMAGE
+          }}
         />
         <div className="absolute inset-0 bg-gradient-to-t from-groove-bg-primary via-groove-bg-primary/30 to-transparent" />
       </div>

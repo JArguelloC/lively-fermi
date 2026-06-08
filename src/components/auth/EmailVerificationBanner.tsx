@@ -41,8 +41,8 @@ export default function EmailVerificationBanner() {
         transition={{ type: 'spring', damping: 25 }}
         className="bg-gradient-to-r from-orange-500/10 to-amber-500/10 border-b border-orange-500/20"
       >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3 flex-1 min-w-0">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="flex items-start sm:items-center gap-3 flex-1 min-w-0">
             <Mail className="w-5 h-5 text-orange-400 flex-shrink-0" />
             <div className="min-w-0">
               <p className="text-sm font-semibold text-orange-300">Email no verificado</p>
@@ -52,11 +52,11 @@ export default function EmailVerificationBanner() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 flex-shrink-0">
+          <div className="flex items-center gap-2 flex-shrink-0 mt-3 sm:mt-0">
             <button
               onClick={handleResendEmail}
               disabled={isLoading}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500/20 hover:bg-orange-500/30 disabled:opacity-50 disabled:cursor-not-allowed text-orange-300 rounded-lg text-xs font-medium transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 bg-orange-500/20 hover:bg-orange-500/30 disabled:opacity-50 disabled:cursor-not-allowed text-orange-300 rounded-lg text-xs sm:text-sm font-medium transition-colors"
             >
               <RotateCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
               {isLoading ? 'Enviando...' : 'Reenviar'}
@@ -78,7 +78,7 @@ export default function EmailVerificationBanner() {
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="flex items-center gap-2 px-4 sm:px-6 lg:px-8 py-2 text-xs text-orange-200 bg-orange-500/5"
+              className="flex flex-col sm:flex-row items-start sm:items-center gap-2 px-4 sm:px-6 lg:px-8 py-2 text-xs sm:text-sm text-orange-200 bg-orange-500/5"
             >
               {message.startsWith('✓') ? (
                 <CheckCircle className="w-4 h-4 text-green-400 flex-shrink-0" />

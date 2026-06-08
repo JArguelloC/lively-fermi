@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { NEWS_FALLBACK_IMAGE } from '../../utils/newsImage';
 
 interface ArticleCardProps {
   slug: string;
@@ -30,7 +31,14 @@ const ArticleCard: React.FC<ArticleCardProps> = ({
         <img
           src={coverImage}
           alt={title}
+          width={800}
+          height={600}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+          loading="lazy"
+          onError={(e) => {
+            const img = e.target as HTMLImageElement
+            img.src = NEWS_FALLBACK_IMAGE
+          }}
         />
       </div>
       <div className={`flex flex-col p-6 ${featured ? 'md:w-1/2 md:p-8' : 'flex-1'}`}>
@@ -49,7 +57,10 @@ const ArticleCard: React.FC<ArticleCardProps> = ({
           <img
             src={authorAvatar}
             alt={authorName}
+            width={40}
+            height={40}
             className="w-10 h-10 rounded-full object-cover"
+            loading="lazy"
           />
           <div className="flex flex-col">
             <span className="text-sm font-medium text-white">{authorName}</span>

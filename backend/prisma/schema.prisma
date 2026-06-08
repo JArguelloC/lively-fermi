@@ -1,0 +1,280 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["relationJoins"]
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum RolUsuario {
+  cliente
+  editor
+  admin
+
+  @@map("rol_usuario")
+}
+
+enum EstadoPedido {
+  pendiente
+  pagado
+  enviado
+  entregado
+  cancelado
+
+  @@map("estado_pedido")
+}
+
+enum EstadoArticulo {
+  borrador
+  publicado
+  archivado
+
+  @@map("estado_articulo")
+}
+
+enum MetodoPago {
+  tarjeta
+  transferencia
+  efectivo
+
+  @@map("metodo_pago")
+}
+
+model Usuario {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  correo            String    @unique
+  nombreVisible     String?   @map("nombre_visible")
+  fotoUrl           String?   @map("foto_url")
+  rol               RolUsuario @default(cliente)
+  creadoEn          DateTime  @default(now()) @map("creado_en") @db.Timestamptz(6)
+  ultimoAccesoEn    DateTime? @map("ultimo_acceso_en") @db.Timestamptz(6)
+  idClienteStripe   String?   @map("id_cliente_stripe")
+
+  direcciones       DireccionUsuario[]
+  preferencias      PreferenciaUsuario?
+  favoritos         UsuarioProductoFavorito[]
+  carrito           Carrito?
+  pedidos           Pedido[]
+  articulos         Articulo[]
+  comentarios       Comentario[]
+
+  @@map("usuario")
+}
+
+model DireccionUsuario {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  idUsuario         String   @map("id_usuario") @db.Uuid
+  nombreCompleto    String   @map("nombre_completo")
+  linea1            String
+  linea2            String?
+  ciudad            String
+  estado            String
+  codigoPostal      String   @map("codigo_postal")
+  pais              String
+  esPredeterminada  Boolean  @default(false) @map("es_predeterminada")
+
+  usuario           Usuario  @relation(fields: [idUsuario], references: [id], onDelete: Cascade)
+
+  @@map("direccion_usuario")
+}
+
+model PreferenciaUsuario {
+  idUsuario         String   @id @map("id_usuario") @db.Uuid
+  suscritoNewsletter Boolean @default(false) @map("suscrito_newsletter")
+  tema              String   @default("sistema")
+  moneda            String   @default("USD")
+  generosFavoritos  String[] @default([]) @map("generos_favoritos")
+
+  usuario           Usuario  @relation(fields: [idUsuario], references: [id], onDelete: Cascade)
+
+  @@map("preferencia_usuario")
+}
+
+model Producto {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug              String    @unique
+  titulo            String
+  descripcion       String?
+  categoria         String
+  subcategoria      String?
+  artista           String?
+  sello             String?
+  fechaLanzamiento  DateTime? @map("fecha_lanzamiento") @db.Date
+  precioBase        Decimal   @map("precio_base") @db.Decimal(10, 2)
+  promedioRating    Decimal?  @map("promedio_rating") @db.Decimal(3, 2)
+  totalResenas      Int       @default(0) @map("total_resenas")
+  imagenes          String[]  @default([])
+  activo            Boolean   @default(true)
+  destacado         Boolean   @default(false)
+  creadoEn          DateTime  @default(now()) @map("creado_en") @db.Timestamptz(6)
+  actualizadoEn     DateTime  @default(now()) @updatedAt @map("actualizado_en") @db.Timestamptz(6)
+
+  variantes         VarianteProducto[]
+  favoritosDe       UsuarioProductoFavorito[]
+  articulosCarrito  ArticuloCarrito[]
+  articulosPedido   ArticuloPedido[]
+
+  @@index([categoria])
+  @@index([slug])
+  @@index([activo])
+  @@index([destacado])
+  @@map("producto")
+}
+
+model VarianteProducto {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  idProducto        String   @map("id_producto") @db.Uuid
+  nombre            String
+  sku               String   @unique
+  precio            Decimal  @db.Decimal(10, 2)
+  stock             Int      @default(0)
+  talla             String?
+  color             String?
+  formato           String?
+
+  producto          Producto @relation(fields: [idProducto], references: [id], onDelete: Cascade)
+  articulosCarrito  ArticuloCarrito[]
+  articulosPedido   ArticuloPedido[]
+
+  @@index([idProducto])
+  @@index([sku])
+  @@map("variante_producto")
+}
+
+model UsuarioProductoFavorito {
+  idUsuario         String   @map("id_usuario") @db.Uuid
+  idProducto        String   @map("id_producto") @db.Uuid
+  agregadoEn        DateTime @default(now()) @map("agregado_en") @db.Timestamptz(6)
+
+  usuario           Usuario  @relation(fields: [idUsuario], references: [id], onDelete: Cascade)
+  producto          Producto @relation(fields: [idProducto], references: [id], onDelete: Cascade)
+
+  @@id([idUsuario, idProducto])
+  @@index([idUsuario])
+  @@index([idProducto])
+  @@map("usuario_producto_favorito")
+}
+
+model Carrito {
+  idUsuario         String   @id @map("id_usuario") @db.Uuid
+  totalArticulos    Int      @default(0) @map("total_articulos")
+  precioTotal       Decimal  @default(0) @map("precio_total") @db.Decimal(10, 2)
+  actualizadoEn     DateTime @default(now()) @updatedAt @map("actualizado_en") @db.Timestamptz(6)
+
+  usuario           Usuario  @relation(fields: [idUsuario], references: [id], onDelete: Cascade)
+  articulos         ArticuloCarrito[]
+
+  @@map("carrito")
+}
+
+model ArticuloCarrito {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  idUsuario         String   @map("id_usuario") @db.Uuid
+  idProducto        String?  @map("id_producto") @db.Uuid
+  idVariante        String?  @map("id_variante") @db.Uuid
+  nombre            String
+  precio            Decimal  @db.Decimal(10, 2)
+  cantidad          Int      @default(1)
+  imagenUrl         String?  @map("imagen_url")
+  artista           String?
+  slug              String?
+
+  carrito           Carrito  @relation(fields: [idUsuario], references: [idUsuario], onDelete: Cascade)
+  producto          Producto? @relation(fields: [idProducto], references: [id], onDelete: SetNull)
+  variante          VarianteProducto? @relation(fields: [idVariante], references: [id], onDelete: SetNull)
+
+  @@index([idUsuario])
+  @@map("articulo_carrito")
+}
+
+model Pedido {
+  id                String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  idUsuario         String      @map("id_usuario") @db.Uuid
+  estado            EstadoPedido @default(pendiente)
+  subtotal          Decimal     @db.Decimal(10, 2)
+  impuesto          Decimal     @default(0) @db.Decimal(10, 2)
+  costoEnvio        Decimal     @default(0) @map("costo_envio") @db.Decimal(10, 2)
+  total             Decimal     @db.Decimal(10, 2)
+  envioNombre       String      @map("envio_nombre")
+  envioLinea1       String      @map("envio_linea1")
+  envioLinea2       String?     @map("envio_linea2")
+  envioCiudad       String      @map("envio_ciudad")
+  envioEstado       String      @map("envio_estado")
+  envioCodigoPostal String      @map("envio_codigo_postal")
+  envioPais         String      @map("envio_pais")
+  metodoPago        MetodoPago  @default(tarjeta) @map("metodo_pago")
+  idIntentoPago     String?     @map("id_intento_pago")
+  creadoEn          DateTime    @default(now()) @map("creado_en") @db.Timestamptz(6)
+  actualizadoEn     DateTime    @default(now()) @updatedAt @map("actualizado_en") @db.Timestamptz(6)
+
+  usuario           Usuario  @relation(fields: [idUsuario], references: [id])
+  articulos         ArticuloPedido[]
+
+  @@index([idUsuario])
+  @@index([estado])
+  @@map("pedido")
+}
+
+model ArticuloPedido {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  idPedido          String   @map("id_pedido") @db.Uuid
+  idProducto        String?  @map("id_producto") @db.Uuid
+  idVariante        String?  @map("id_variante") @db.Uuid
+  titulo            String
+  sku               String
+  precio            Decimal  @db.Decimal(10, 2)
+  cantidad          Int
+  imagenUrl         String?  @map("imagen_url")
+
+  pedido            Pedido   @relation(fields: [idPedido], references: [id], onDelete: Cascade)
+  producto          Producto? @relation(fields: [idProducto], references: [id], onDelete: SetNull)
+  variante          VarianteProducto? @relation(fields: [idVariante], references: [id], onDelete: SetNull)
+
+  @@index([idPedido])
+  @@map("articulo_pedido")
+}
+
+model Articulo {
+  id                String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug              String          @unique
+  titulo            String
+  extracto          String?
+  contenido         String
+  idAutor           String          @map("id_autor") @db.Uuid
+  categoria         String
+  etiquetas         String[]        @default([])
+  imagenPortada     String?         @map("imagen_portada")
+  estado            EstadoArticulo  @default(borrador)
+  publicadoEn       DateTime?       @map("publicado_en") @db.Timestamptz(6)
+  creadoEn          DateTime        @default(now()) @map("creado_en") @db.Timestamptz(6)
+  actualizadoEn     DateTime        @default(now()) @updatedAt @map("actualizado_en") @db.Timestamptz(6)
+  vistas            Int             @default(0)
+
+  autor             Usuario         @relation(fields: [idAutor], references: [id])
+  comentarios       Comentario[]
+
+  @@index([idAutor])
+  @@index([estado])
+  @@index([slug])
+  @@map("articulo")
+}
+
+model Comentario {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  idArticulo        String   @map("id_articulo") @db.Uuid
+  idUsuario         String   @map("id_usuario") @db.Uuid
+  contenido         String
+  creadoEn          DateTime @default(now()) @map("creado_en") @db.Timestamptz(6)
+  actualizadoEn     DateTime? @map("actualizado_en") @db.Timestamptz(6)
+  editado           Boolean  @default(false)
+
+  articulo          Articulo @relation(fields: [idArticulo], references: [id], onDelete: Cascade)
+  usuario           Usuario  @relation(fields: [idUsuario], references: [id])
+
+  @@index([idArticulo])
+  @@index([idUsuario])
+  @@map("comentario")
+}

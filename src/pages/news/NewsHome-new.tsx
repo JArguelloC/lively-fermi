@@ -15,6 +15,7 @@ import { motion } from 'framer-motion'
 import { Plus, MessageSquare, Calendar, User } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { db } from '../../services/firebase'
+import { getNewsCoverImage, NEWS_FALLBACK_IMAGE } from '../../utils/newsImage'
 import {
   collection,
   addDoc,
@@ -108,7 +109,7 @@ function CreateNewsModal({ isOpen, onClose, userId, userName }: CreateNewsModalP
         authorId: userId,
         category: formData.category,
         tags: formData.tags.split(',').map(t => t.trim()).filter(t => t),
-        coverImage: formData.coverImage || '/images/news/default-cover.jpg',
+        coverImage: formData.coverImage || NEWS_FALLBACK_IMAGE,
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
         viewCount: 0,
@@ -198,7 +199,7 @@ function CreateNewsModal({ isOpen, onClose, userId, userName }: CreateNewsModalP
           </div>
 
           {/* Categoría */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className="block text-sm font-semibold mb-2">Categoría</label>
               <select
@@ -351,9 +352,16 @@ export default function NewsSection() {
                   {/* Cover Image */}
                   <div className="relative w-full h-40 overflow-hidden bg-groove-bg-primary">
                     <img
-                      src={article.coverImage || '/images/news/default-cover.jpg'}
+                      src={getNewsCoverImage(article.coverImage)}
                       alt={article.title}
+                      width={640}
+                      height={240}
+                      loading="lazy"
                       className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                      onError={(e) => {
+                        const img = e.target as HTMLImageElement
+                        img.src = NEWS_FALLBACK_IMAGE
+                      }}
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-groove-bg-primary/80 to-transparent" />
                     <span className="absolute bottom-3 left-3 text-xs bg-groove-purple px-3 py-1 rounded-full font-semibold uppercase">

@@ -13,7 +13,9 @@ export default function AdminDashboard() {
       <aside className={`${sidebarOpen ? 'w-64' : 'w-20'} bg-groove-bg-secondary border-r border-white/5 flex flex-col transition-all duration-300`}>
         <div className="p-4 border-b border-white/5 flex items-center justify-between">
           {sidebarOpen && <Link to="/" className="text-xl font-display font-bold text-groove-gold tracking-widest">GROOVE</Link>}
-          <button onClick={() => setSidebarOpen(!sidebarOpen)} className="p-2 hover:bg-white/5 rounded-lg text-groove-text-secondary"><Menu className="w-5 h-5" /></button>
+          <button onClick={() => setSidebarOpen(!sidebarOpen)} className="p-2 hover:bg-white/5 rounded-lg text-groove-text-secondary" aria-label={sidebarOpen ? 'Cerrar barra lateral' : 'Abrir barra lateral'}>
+            <Menu className="w-5 h-5" />
+          </button>
         </div>
         <nav className="flex-1 p-4 space-y-2">
           {[
@@ -24,6 +26,7 @@ export default function AdminDashboard() {
             { id: 'settings', label: 'Ajustes', icon: Settings },
           ].map(item => (
             <button key={item.id} onClick={() => setActiveTab(item.id)}
+              aria-label={item.label}
               className={`w-full flex items-center gap-3 p-3 rounded-xl transition-colors ${activeTab === item.id ? 'bg-groove-gold/10 text-groove-gold' : 'text-groove-text-secondary hover:text-white hover:bg-white/5'}`}>
               <item.icon className="w-5 h-5 flex-shrink-0" />
               {sidebarOpen && <span className="font-medium text-sm">{item.label}</span>}
@@ -38,16 +41,16 @@ export default function AdminDashboard() {
           <div className="flex items-center gap-4 flex-1">
             <div className="relative max-w-md w-full">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-groove-text-secondary" />
-              <input type="text" placeholder="Buscar pedidos, productos..."
+              <input type="text" placeholder="Buscar pedidos, productos..." aria-label="Buscar pedidos o productos"
                 className="w-full bg-groove-bg-primary border border-white/10 rounded-full pl-10 pr-4 py-2 text-sm focus:outline-none focus:border-groove-gold" />
             </div>
           </div>
           <div className="flex items-center gap-4">
-            <button className="relative p-2 text-groove-text-secondary hover:text-white">
+            <button className="relative p-2 text-groove-text-secondary hover:text-white" aria-label="Notificaciones">
               <Bell className="w-5 h-5" />
               <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
             </button>
-            <img src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=32&h=32&fit=crop" alt="Admin" className="w-8 h-8 rounded-full border border-groove-gold" />
+            <img src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=32&h=32&fit=crop" alt="Admin" width={32} height={32} loading="lazy" className="w-8 h-8 rounded-full border border-groove-gold" />
           </div>
         </header>
 
@@ -122,7 +125,7 @@ export default function AdminDashboard() {
                     {mockProducts.slice(0, 8).map(p => (
                       <tr key={p.id} className="hover:bg-white/5 transition-colors">
                         <td className="p-4 flex items-center gap-3">
-                          <img src={p.images[0]} alt="" className="w-10 h-10 rounded bg-black object-cover" />
+                          <img src={p.images[0]} alt="" width={40} height={40} loading="lazy" className="w-10 h-10 rounded bg-black object-cover" />
                           <div><p className="font-medium">{p.name}</p><p className="text-xs text-groove-text-secondary">{p.artist || p.brand}</p></div>
                         </td>
                         <td className="p-4 capitalize text-groove-text-secondary">{p.category}</td>
@@ -148,7 +151,7 @@ export default function AdminDashboard() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {mockArticles.map(a => (
                   <div key={a.id} className="bg-groove-bg-secondary p-4 rounded-xl border border-white/5 flex gap-4">
-                    <img src={a.coverImageUrl} alt="" className="w-24 h-24 rounded-lg object-cover" />
+                    <img src={a.coverImageUrl} alt="" width={96} height={96} loading="lazy" className="w-24 h-24 rounded-lg object-cover" />
                     <div className="flex-1">
                       <span className="text-xs text-groove-purple font-medium">{a.category}</span>
                       <h4 className="font-bold text-sm line-clamp-2 mt-1 mb-2">{a.title}</h4>

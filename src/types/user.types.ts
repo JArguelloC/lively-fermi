@@ -17,6 +17,7 @@ export interface UserPreferences {
   theme: 'light' | 'dark' | 'system';
   currency: string;
   favoriteGenres?: string[];
+  favoriteProducts?: string[];
 }
 
 export interface User {

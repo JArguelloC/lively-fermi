@@ -56,19 +56,16 @@ export function useProducts(category?: string) {
               tags: [p.subcategory || p.category],
             }))
             setProducts(mapped)
-            console.log(`✅ ${mapped.length} productos cargados desde Firestore`)
           } else {
             // Fallback a mockData si Firestore está vacío
             const filtered = category && category !== 'all' 
               ? mockProducts.filter(p => p.category === category)
               : mockProducts
             setProducts(filtered)
-            console.log(`⚠️  Usando mockData (${filtered.length} productos)`)
           }
           setIsLoading(false)
         },
         (err) => {
-          console.warn('Error Firestore, usando mockData:', err)
           const filtered = category && category !== 'all'
             ? mockProducts.filter(p => p.category === category)
             : mockProducts
@@ -80,7 +77,6 @@ export function useProducts(category?: string) {
 
       return () => unsubscribe()
     } catch (err) {
-      console.warn('Error configurando Firestore, usando mockData:', err)
       const filtered = category && category !== 'all'
         ? mockProducts.filter(p => p.category === category)
         : mockProducts

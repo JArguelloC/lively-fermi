@@ -1,12 +1,15 @@
 import React, { HTMLAttributes } from 'react';
+import { Product } from '../../types/product.types';
 
 interface CardProps extends HTMLAttributes<HTMLDivElement> {
   variant?: 'dark' | 'glass';
+  product: Product;
 }
 
 export const Card: React.FC<CardProps> = ({
   className = '',
   variant = 'dark',
+  product,
   children,
   ...props
 }) => {

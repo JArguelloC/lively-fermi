@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { CheckCircle, Copy, Home, ShoppingBag } from 'lucide-react'
 import { motion } from 'framer-motion'
+import SEOMeta from '../../components/ui/SEOMeta'
 
 export default function OrderConfirmation() {
   const navigate = useNavigate()
@@ -47,36 +48,53 @@ export default function OrderConfirmation() {
 
   if (redirecting) {
     return (
-      <div className="min-h-[70vh] flex flex-col items-center justify-center p-4">
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="text-center"
-        >
-          <ShoppingBag className="w-16 h-16 text-groove-text-secondary mx-auto mb-4" />
-          <h2 className="text-2xl font-bold mb-2">No se encontró número de pedido</h2>
-          <p className="text-groove-text-secondary mb-6">Redirigiendo a la página de inicio...</p>
-        </motion.div>
-      </div>
+      <>
+        <SEOMeta
+          title="Confirmación de Pedido"
+          description="Tu pedido se está procesando en Groove Music Store. Serás redirigido a la página de inicio en breve."
+        />
+        <div className="min-h-[70vh] flex flex-col items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="text-center"
+          >
+            <ShoppingBag className="w-16 h-16 text-groove-text-secondary mx-auto mb-4" />
+            <h2 className="text-2xl font-bold mb-2">No se encontró número de pedido</h2>
+            <p className="text-groove-text-secondary mb-6">Redirigiendo a la página de inicio...</p>
+          </motion.div>
+        </div>
+      </>
     )
   }
 
   if (!orderId) {
     return (
-      <div className="min-h-[70vh] flex items-center justify-center">
-        <div className="w-10 h-10 border-4 border-groove-gold/20 border-t-groove-gold rounded-full animate-spin" />
-      </div>
+      <>
+        <SEOMeta
+          title="Confirmación de Pedido"
+          description="Tu pedido se está procesando en Groove Music Store. Verifica tu número de pedido y confírmalo desde aquí."
+        />
+        <div className="min-h-[70vh] flex items-center justify-center">
+          <div className="w-10 h-10 border-4 border-groove-gold/20 border-t-groove-gold rounded-full animate-spin" />
+        </div>
+      </>
     )
   }
 
   return (
-    <div className="min-h-[70vh] max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.4 }}
-        className="text-center mb-12"
-      >
+    <>
+      <SEOMeta
+        title="Confirmación de Pedido"
+        description="Gracias por comprar en Groove Music Store. Aquí puedes ver el número de pedido y copiarlo para tu seguimiento."
+      />
+      <div className="min-h-[70vh] max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.4 }}
+          className="text-center mb-12"
+        >
         <motion.div
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
@@ -174,6 +192,7 @@ export default function OrderConfirmation() {
       <div className="mt-12 text-center text-xs text-groove-text-secondary">
         <p>Gracias por tu compra. Estamos felices de servirte.</p>
       </div>
-    </div>
+      </div>
+    </>
   )
 }

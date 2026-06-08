@@ -2,7 +2,10 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ChevronLeft, ChevronRight, Disc3, Guitar, ShoppingBag, Percent, ArrowRight, Star, Mail } from 'lucide-react'
-import { mockProducts, mockArticles, mockBanners, formatPrice } from '../data/mockData'
+import { mockProducts, mockBanners, formatPrice } from '../data/mockData'
+import WebpImage from '../components/ui/WebpImage'
+import { getNewsCoverImage, NEWS_FALLBACK_IMAGE } from '../utils/newsImage'
+import SEOMeta from '../components/ui/SEOMeta'
 
 const categories = [
   { name: 'Música', icon: Disc3, link: '/tienda/musica', color: 'from-purple-900 to-groove-purple' },
@@ -20,18 +23,23 @@ function HeroBanner() {
   }, [])
 
   const banner = mockBanners[current]
+  const mobileUrl = `${banner.imageUrl}${banner.imageUrl.includes('?') ? '&' : '?'}w=600&fm=webp`
+  const desktopUrl = `${banner.imageUrl}${banner.imageUrl.includes('?') ? '&' : '?'}w=1200&fm=webp`
 
   return (
-    <section className="relative w-full h-[500px] md:h-[550px] overflow-hidden">
+    <section className="relative w-full h-[280px] sm:h-[380px] md:h-[550px] overflow-hidden">
       <AnimatePresence mode="wait">
         <motion.div key={banner.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.6 }}
-          className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${banner.imageUrl})` }}>
+          className="absolute inset-0 bg-cover bg-center"
+          style={{ backgroundImage: `url('${desktopUrl}')`, backgroundSize: 'cover', backgroundPosition: 'center' }}
+          role="img"
+          aria-label={banner.title}>
           <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/50 to-transparent" />
           <div className="relative z-10 h-full flex flex-col justify-center max-w-7xl mx-auto px-6 md:px-12">
             <motion.h1 initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.2 }}
-              className="text-4xl md:text-6xl font-display font-extrabold mb-4 max-w-xl">{banner.title}</motion.h1>
+              className="text-2xl sm:text-3xl md:text-6xl font-display font-extrabold mb-4 max-w-xl">{banner.title}</motion.h1>
             <motion.p initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.4 }}
-              className="text-lg md:text-xl text-groove-text-secondary mb-8 max-w-md">{banner.subtitle}</motion.p>
+              className="text-sm sm:text-base md:text-xl text-groove-text-secondary mb-8 max-w-md">{banner.subtitle}</motion.p>
             <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.6 }}>
               <Link to={banner.ctaLink}
                 className="inline-flex items-center gap-2 bg-groove-gold hover:bg-groove-gold-light text-black font-bold px-8 py-4 rounded-full transition-all hover:scale-105">
@@ -43,15 +51,23 @@ function HeroBanner() {
       </AnimatePresence>
       <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-2 z-20">
         {mockBanners.map((_, i) => (
-          <button key={i} onClick={() => setCurrent(i)}
+          <button
+            key={i}
+            onClick={() => setCurrent(i)}
+            aria-label={`Ir al banner ${i + 1}`}
+            aria-current={i === current ? 'true' : undefined}
             className={`w-3 h-3 rounded-full transition-all ${i === current ? 'bg-groove-gold w-8' : 'bg-white/40 hover:bg-white/60'}`} />
         ))}
       </div>
-      <button onClick={() => setCurrent(i => (i - 1 + mockBanners.length) % mockBanners.length)}
+      <button
+        onClick={() => setCurrent(i => (i - 1 + mockBanners.length) % mockBanners.length)}
+        aria-label="Anterior banner"
         className="absolute left-4 top-1/2 -translate-y-1/2 z-20 bg-black/40 hover:bg-black/60 backdrop-blur-sm p-3 rounded-full transition-colors">
         <ChevronLeft className="w-5 h-5" />
       </button>
-      <button onClick={() => setCurrent(i => (i + 1) % mockBanners.length)}
+      <button
+        onClick={() => setCurrent(i => (i + 1) % mockBanners.length)}
+        aria-label="Siguiente banner"
         className="absolute right-4 top-1/2 -translate-y-1/2 z-20 bg-black/40 hover:bg-black/60 backdrop-blur-sm p-3 rounded-full transition-colors">
         <ChevronRight className="w-5 h-5" />
       </button>
@@ -64,7 +80,28 @@ function ProductCardMini({ product }: { product: typeof mockProducts[0] }) {
     <Link to={`/producto/${product.slug}`}
       className="group flex-shrink-0 w-[220px] bg-groove-bg-secondary rounded-2xl overflow-hidden border border-white/5 hover:border-groove-gold/30 transition-all hover:-translate-y-1">
       <div className="relative aspect-square overflow-hidden">
-        <img src={product.images[0]} alt={product.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" loading="lazy" />
+        <WebpImage
+          src={product.images[0] || '/images/placeholder.svg'}
+          alt={product.name}
+          width={220}
+          height={220}
+          sizes="(max-width: 640px) 100vw, 220px"
+          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+          loading="lazy"
+          onError={(e) => {
+            const img = e.target as HTMLImageElement;
+            img.src = '/images/placeholder.svg';
+          }}
+        />
+        {product.stock <= 0 ? (
+          <span className="absolute top-3 right-3 bg-red-600 text-white text-xs font-bold px-2 py-1 rounded-full">
+            Sin stock
+          </span>
+        ) : product.stock <= 5 ? (
+          <span className="absolute top-3 right-3 bg-amber-600 text-white text-xs font-bold px-2 py-1 rounded-full">
+            Poco stock
+          </span>
+        ) : null}
         {product.isOnOffer && product.compareAtPrice && (
           <span className="absolute top-3 left-3 bg-red-600 text-white text-xs font-bold px-2 py-1 rounded-full">
             -{Math.round((1 - product.price / product.compareAtPrice) * 100)}%
@@ -90,11 +127,33 @@ function ProductCardMini({ product }: { product: typeof mockProducts[0] }) {
 export default function Home() {
   const featuredProducts = mockProducts.filter(p => p.isFeatured)
   const offerProducts = mockProducts.filter(p => p.isOnOffer)
-  const featuredArticle = mockArticles.find(a => a.isFeatured)
-  const recentArticles = mockArticles.filter(a => !a.isFeatured).slice(0, 3)
+  const [newsArticles, setNewsArticles] = useState<HomeArticle[]>([])
+
+  useEffect(() => {
+    const newsRef = collection(db, 'news')
+    const q = query(newsRef, orderBy('createdAt', 'desc'), limit(4))
+
+    const unsubscribe = onSnapshot(q, snapshot => {
+      const articles = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      } as HomeArticle))
+
+      setNewsArticles(articles)
+    })
+
+    return () => unsubscribe()
+  }, [])
+
+  const featuredArticle = newsArticles[0]
+  const recentArticles = newsArticles.slice(1, 4)
 
   return (
     <div className="min-h-screen">
+      <SEOMeta 
+        title="Tienda de Música, Vinilos e Instrumentos"
+        description="Groove Music Store - Tu tienda especializada en música, vinilos, instrumentos musicales y el mejor merchandising de artistas. Envíos rápidos y productos auténticos."
+      />
       {/* 1. Hero Banner */}
       <HeroBanner />
 
@@ -141,8 +200,19 @@ export default function Home() {
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Link to={`/noticias/${featuredArticle.slug}`}
-              className="group relative rounded-2xl overflow-hidden h-[400px]">
-              <img src={featuredArticle.coverImageUrl} alt={featuredArticle.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+              className="group relative rounded-2xl overflow-hidden h-[220px] md:h-[400px]">
+              <img
+                src={getNewsCoverImage(featuredArticle.coverImage)}
+                alt={featuredArticle.title}
+                width={1200}
+                height={500}
+                loading="lazy"
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                onError={(e) => {
+                  const img = e.target as HTMLImageElement
+                  img.src = NEWS_FALLBACK_IMAGE
+                }}
+              />
               <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
               <div className="absolute bottom-0 left-0 right-0 p-6">
                 <span className="text-xs bg-groove-purple px-3 py-1 rounded-full font-medium mb-3 inline-block">{featuredArticle.category}</span>
@@ -154,7 +224,18 @@ export default function Home() {
               {recentArticles.map(article => (
                 <Link key={article.id} to={`/noticias/${article.slug}`}
                   className="group flex gap-4 bg-groove-bg-secondary rounded-xl p-4 border border-white/5 hover:border-groove-gold/20 transition-all">
-                  <img src={article.coverImageUrl} alt={article.title} className="w-28 h-28 object-cover rounded-lg flex-shrink-0" />
+                  <img
+                    src={getNewsCoverImage(article.coverImage)}
+                    alt={article.title}
+                    width={112}
+                    height={112}
+                    loading="lazy"
+                    className="w-28 h-28 object-cover rounded-lg flex-shrink-0"
+                    onError={(e) => {
+                      const img = e.target as HTMLImageElement
+                      img.src = NEWS_FALLBACK_IMAGE
+                    }}
+                  />
                   <div className="flex flex-col justify-center">
                     <span className="text-xs text-groove-purple font-medium mb-1">{article.category}</span>
                     <h4 className="font-bold text-sm mb-1 group-hover:text-groove-gold transition-colors line-clamp-2">{article.title}</h4>
@@ -177,7 +258,21 @@ export default function Home() {
               <Link key={p.id} to={`/producto/${p.slug}`}
                 className="group bg-groove-bg-secondary rounded-2xl overflow-hidden border border-white/5 hover:border-groove-gold/30 transition-all hover:-translate-y-1">
                 <div className="relative aspect-square overflow-hidden">
-                  <img src={p.images[0]} alt={p.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" loading="lazy" />
+                  <img src={p.images[0] || '/images/placeholder.svg'} alt={p.name} width={400} height={400} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" loading="lazy" 
+                    onError={(e) => {
+                      const img = e.target as HTMLImageElement;
+                      img.src = '/images/placeholder.svg';
+                    }}
+                  />
+                  {p.stock <= 0 ? (
+                    <span className="absolute top-3 right-3 bg-red-600 text-white text-xs font-bold px-2 py-1 rounded-full">
+                      Sin stock
+                    </span>
+                  ) : p.stock <= 5 ? (
+                    <span className="absolute top-3 right-3 bg-amber-600 text-white text-xs font-bold px-2 py-1 rounded-full">
+                      Poco stock
+                    </span>
+                  ) : null}
                   {p.compareAtPrice && (
                     <span className="absolute top-3 left-3 bg-red-600 text-white text-xs font-bold px-2 py-1 rounded-full">
                       -{Math.round((1 - p.price / p.compareAtPrice) * 100)}%
@@ -199,14 +294,33 @@ export default function Home() {
 
       {/* 6. Top Vendidos */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-        <h2 className="text-3xl font-display font-bold mb-8">Los Más Vendidos</h2>
-        <div className="flex gap-6 overflow-x-auto pb-4">
-          {mockProducts.sort((a, b) => b.reviewCount - a.reviewCount).slice(0, 10).map((p, i) => (
-            <div key={p.id} className="relative flex-shrink-0">
-              <span className="absolute -top-3 -left-2 z-10 bg-groove-gold text-black text-xs font-extrabold w-7 h-7 rounded-full flex items-center justify-center">{i + 1}</span>
-              <ProductCardMini product={p} />
+        <div className="bg-groove-bg-secondary/80 border border-white/10 rounded-[40px] shadow-2xl shadow-black/20 p-8">
+          <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 mb-10">
+            <div className="max-w-2xl">
+              <span className="inline-flex items-center gap-2 rounded-full bg-groove-gold/15 text-groove-gold px-3 py-1 text-xs font-semibold uppercase tracking-[0.25em]">
+                Top 10
+              </span>
+              <h2 className="mt-4 text-4xl font-display font-bold text-white">Los Más Vendidos</h2>
+              <p className="mt-3 text-groove-text-secondary text-base leading-7">
+                Los productos que más buscan nuestros clientes, con calificaciones altas y estilo Groove. Ideal para encontrar lo mejor del catálogo en un solo lugar.
+              </p>
             </div>
-          ))}
+            <Link to="/tienda" className="inline-flex items-center gap-2 rounded-full bg-groove-gold px-6 py-3 text-sm font-bold text-black hover:bg-groove-gold-light transition-all">
+              Ver todos
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {mockProducts.sort((a, b) => b.reviewCount - a.reviewCount).slice(0, 10).map((p, i) => (
+              <div key={p.id} className="group relative rounded-3xl overflow-hidden border border-white/10 bg-groove-bg-primary shadow-[0_20px_80px_-45px_rgba(0,0,0,0.8)] transition-transform hover:-translate-y-1">
+                <span className="absolute -top-3 -left-3 z-10 bg-groove-gold text-black text-xs font-extrabold w-9 h-9 rounded-full flex items-center justify-center shadow-lg shadow-groove-gold/20">
+                  {i + 1}
+                </span>
+                <ProductCardMini product={p} />
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 

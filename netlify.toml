@@ -1,0 +1,16 @@
+[build]
+  command = "cd backend_BARBOX-main && npm install && npm run build"
+  functions = "backend_BARBOX-main/dist"
+  publish = "dist"
+
+[env.production]
+  NODE_ENV = "production"
+
+[[redirects]]
+  from = "/api/v1/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+[dev]
+  command = "cd backend_BARBOX-main && npm run dev"
+  port = 3000

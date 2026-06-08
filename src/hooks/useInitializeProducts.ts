@@ -21,17 +21,19 @@ export function useInitializeProducts() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    if (!import.meta.env.DEV) {
+      setIsInitialized(true)
+      return
+    }
+
     const initializeProducts = async () => {
       try {
         // Verificar si la colección 'products' existe y tiene documentos
         const productsRef = collection(db, 'products')
         const snapshot = await getDocs(productsRef)
 
-        console.log(`📊 Productos existentes en Firestore: ${snapshot.size}`)
-
         // Si no hay productos o hay menos que en mockData, sincronizar
         if (snapshot.size < mockProducts.length) {
-          console.log('🔄 Sincronizando productos a Firestore...')
           
           const batch = writeBatch(db)
           
@@ -49,15 +51,11 @@ export function useInitializeProducts() {
           }
 
           await batch.commit()
-          console.log(`✅ Productos sincronizados: ${mockProducts.length}`)
-        } else {
-          console.log('✅ Productos ya inicializados en Firestore')
         }
 
         setIsInitialized(true)
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Error desconocido'
-        console.error('❌ Error inicializando productos:', errorMessage)
         setError(errorMessage)
         // No fallar la app, solo loguear el error
         setIsInitialized(true)

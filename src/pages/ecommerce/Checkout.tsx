@@ -13,11 +13,12 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { CreditCard, MapPin, Check, Lock, ArrowRight, ArrowLeft, ShieldCheck, ShoppingCart, AlertCircle } from 'lucide-react'
+import SEOMeta from '../../components/ui/SEOMeta'
 import MapboxGeocoderComponent from '../../components/ecommerce/MapboxGeocoder'
 import { formatPrice } from '../../data/mockData'
 import { useCartStore } from '../../store/cartStore'
 import { useAuthStore } from '../../store/authStore'
-import { PayPalButtons } from '@paypal/react-paypal-js'
+import { PayPalScriptProvider, PayPalButtons } from '@paypal/react-paypal-js'
 import { validateOrderStock, decrementProductStock } from '../../services/stockService'
 import { auth, db } from '../../services/firebase'
 import { deleteDoc, doc } from 'firebase/firestore'
@@ -234,7 +235,13 @@ export default function Checkout() {
   }
 
   return (
-    <div className="min-h-screen bg-groove-bg-primary text-groove-text-primary py-8">
+    <PayPalScriptProvider options={{ "client-id": "test", currency: "USD", components: "buttons" }}>
+      <>
+        <SEOMeta 
+          title="Checkout Seguro"
+          description="Completa tu compra en Groove: envío a Ecuador, múltiples formas de pago, y protección de datos."
+        />
+        <div className="min-h-screen bg-groove-bg-primary text-groove-text-primary py-8">
       <div className="max-w-6xl mx-auto px-4 sm:px-6">
         {/* Header */}
         <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
@@ -488,5 +495,7 @@ export default function Checkout() {
         </div>
       </div>
     </div>
+    </>
+    </PayPalScriptProvider>
   )
 }
