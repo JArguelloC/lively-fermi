@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom'  
 import { useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
@@ -6,6 +7,7 @@ import { useCartStore } from '../../store/cartStore'
 import { formatPrice } from '../../data/mockData'
 
 export default function Cart() {
+  const navigate = useNavigate() 
   const items = useCartStore(state => state.items)
   const removeItem = useCartStore(state => state.removeItem)
   const updateQuantity = useCartStore(state => state.updateQuantity)
@@ -109,10 +111,14 @@ export default function Cart() {
               <span className="text-groove-gold">{formatPrice(total)}</span>
             </div>
 
-            <Link to="/checkout"
-              className="w-full flex items-center justify-center gap-2 bg-groove-gold hover:bg-groove-gold-light text-black font-bold py-4 rounded-full transition-all hover:scale-[1.02]">
-              Proceder al Pago <ArrowRight className="w-5 h-5" />
-            </Link>
+            <button
+               onClick={() => {
+                navigate('/login?redirect=checkout')
+              }}
+              className="w-full flex items-center justify-center gap-2 bg-groove-gold hover:bg-groove-gold-light text-black font-bold py-4 rounded-full transition-all hover:scale-[1.02]"
+            >
+              Iniciar sesión y pagar <ArrowRight className="w-5 h-5" />
+            </button>
             <Link to="/" className="block text-center text-sm text-groove-gold hover:underline mt-4">
               ← Seguir comprando
             </Link>
