@@ -3,12 +3,17 @@
     "frontend": {
       "routePrefix": "/",
       "framework": "vite"
-    },
-    "backend": {
-      "root": "backend",
-      "routePrefix": "/api",
-      "runtime": "nodejs18.x",
-      "entrypoint": "index.js"
     }
-  }
+  },
+  "functions": {
+    "backend/api/index.js": {
+      "runtime": "nodejs18.x"
+    }
+  },
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "backend/api/index.js"
+    }
+  ]
 }
