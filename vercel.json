@@ -1,12 +1,12 @@
 {
-  "version": 2,
-  "buildCommand": "cd backend_BARBOX-main && npm install && npm run build",
-  "env": {
-    "NODE_ENV": "production"
-  },
-  "functions": {
-    "api/index.js": {
-      "runtime": "nodejs18.x"
+  "experimentalServices": {
+    "frontend": {
+      "routePrefix": "/",
+      "framework": "vite"
+    },
+    "backend": {
+      "root": "backend",
+      "routePrefix": "/api"
     }
   }
 }
