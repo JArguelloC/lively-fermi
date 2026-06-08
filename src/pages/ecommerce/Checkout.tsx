@@ -1,24 +1,32 @@
 /**
  * CHECKOUT PAGE - Flujo completo de compra
- * 
+ *
  * CARACTERÍSTICAS:
- * ✅ Envío dinámico: >$50 = FREE, ≤$50 = $5.99
- * ✅ Mapbox Ecuador-only (countries="ec")
- * ✅ CAPA 2 (validación) + CAPA 3 (decremento atómico)
- * ✅ Cart purge en Firebase después de éxito
- * ✅ Forma de usuario específico: 5AIaouE4Eler4l4nZEpZBq6qHB43
+ * - Envío dinámico: >$50 = GRATIS, ≤$50 = $5.99
+ * - Mapbox Ecuador-only (countries="ec")
+ * - Validación de tarjeta en tiempo real (número/Luhn, MM/AA, CVC/CVV)
+ * - El pedido se crea vía API REST; el backend valida y descuenta stock de forma atómica
  */
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { CreditCard, MapPin, Check, Lock, ArrowRight, ArrowLeft, ShoppingCart, AlertCircle } from 'lucide-react'
+import { CreditCard, MapPin, Check, Lock, ArrowRight, ArrowLeft, ShoppingCart, AlertCircle, CheckCircle2 } from 'lucide-react'
 import SEOMeta from '../../components/ui/SEOMeta'
 import MapboxGeocoderComponent from '../../components/ecommerce/MapboxGeocoder'
 import { useCartStore } from '../../store/cartStore'
 import { useAuthStore } from '../../store/authStore'
 import { PayPalScriptProvider, PayPalButtons } from '@paypal/react-paypal-js'
 import { createOrder, type CreateOrderInput } from '../../services/api'
+import {
+  formatCardNumber,
+  formatExpiry,
+  detectCardType,
+  validateCardNumber,
+  validateExpiry,
+  validateCVC,
+  validateCardName,
+} from '../../utils/cardValidation'
 
 const steps = ['Envío', 'Pago', 'Confirmar']
 
@@ -53,6 +61,50 @@ export default function Checkout() {
     zip: '',
     province: '' // Ej: Pichincha, Guayas, Manabí
   })
+
+  // ═══════════════════════════════════════════════════════════════
+  // FORM STATE - Datos de la tarjeta (validación en tiempo real)
+  // ═══════════════════════════════════════════════════════════════
+  const [cardData, setCardData] = useState({ number: '', name: '', expiry: '', cvc: '' })
+  const [cardTouched, setCardTouched] = useState({ number: false, name: false, expiry: false, cvc: false })
+
+  const cardType = useMemo(() => detectCardType(cardData.number), [cardData.number])
+
+  const cardErrors = useMemo(
+    () => ({
+      number: validateCardNumber(cardData.number),
+      name: validateCardName(cardData.name),
+      expiry: validateExpiry(cardData.expiry),
+      cvc: validateCVC(cardData.cvc, cardType.type),
+    }),
+    [cardData, cardType.type]
+  )
+
+  const isCardValid = !cardErrors.number && !cardErrors.name && !cardErrors.expiry && !cardErrors.cvc
+
+  // Estado visual de cada campo: idle (neutro), valid (verde) o invalid (rojo).
+  const cardFieldState = (field: keyof typeof cardData): 'idle' | 'valid' | 'invalid' => {
+    const hasValue = cardData[field].length > 0
+    const showError = cardTouched[field] || hasValue
+    if (showError && cardErrors[field]) return 'invalid'
+    if (hasValue && !cardErrors[field]) return 'valid'
+    return 'idle'
+  }
+
+  const cardBorderClass = (field: keyof typeof cardData): string => {
+    const state = cardFieldState(field)
+    if (state === 'invalid') return 'border-red-500 focus:border-red-500'
+    if (state === 'valid') return 'border-green-500 focus:border-green-500'
+    return 'border-groove-gold/30 focus:border-groove-gold'
+  }
+
+  const handleCardChange = (field: keyof typeof cardData, raw: string) => {
+    let value = raw
+    if (field === 'number') value = formatCardNumber(raw)
+    else if (field === 'expiry') value = formatExpiry(raw)
+    else if (field === 'cvc') value = raw.replace(/\D/g, '').slice(0, cardType.cvcLength)
+    setCardData((prev) => ({ ...prev, [field]: value }))
+  }
 
   // ═══════════════════════════════════════════════════════════════
   // CÁLCULO DE ENVÍO DINÁMICO
@@ -105,6 +157,10 @@ export default function Checkout() {
   // HANDLER: Pago con Tarjeta
   // ═══════════════════════════════════════════════════════════════
   const handleCardPayment = async () => {
+    // Marca todos los campos como tocados para mostrar errores pendientes
+    setCardTouched({ number: true, name: true, expiry: true, cvc: true })
+    if (!isCardValid) return
+
     setIsProcessing(true)
     setStockError('')
 
@@ -363,13 +419,141 @@ export default function Checkout() {
                   {/* Método seleccionado */}
                   <AnimatePresence>
                     {paymentMethod === 'card' && (
-                      <motion.button
-                        onClick={handleCardPayment}
-                        disabled={isProcessing}
-                        className="w-full bg-groove-gold text-black font-bold py-3 rounded-lg hover:bg-groove-gold-light disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="space-y-4 overflow-hidden"
                       >
-                        {isProcessing ? '⏳ Procesando...' : <>Pagar ${(total / 100).toFixed(2)}</>}
-                      </motion.button>
+                        {/* Datos de la tarjeta con validación en tiempo real */}
+                        <div>
+                          <label htmlFor="card-number" className="block text-sm font-semibold mb-1">
+                            Número de tarjeta
+                          </label>
+                          <div className="relative">
+                            <input
+                              id="card-number"
+                              type="text"
+                              inputMode="numeric"
+                              autoComplete="cc-number"
+                              placeholder="1234 5678 9012 3456"
+                              value={cardData.number}
+                              onChange={(e) => handleCardChange('number', e.target.value)}
+                              onBlur={() => setCardTouched((p) => ({ ...p, number: true }))}
+                              aria-invalid={cardFieldState('number') === 'invalid'}
+                              className={`w-full bg-groove-bg-primary border rounded-lg px-4 py-3 pr-24 focus:outline-none transition-colors ${cardBorderClass('number')}`}
+                            />
+                            <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                              {cardType.label && (
+                                <span className="text-xs font-semibold text-groove-text-secondary">{cardType.label}</span>
+                              )}
+                              {cardFieldState('number') === 'valid' && <CheckCircle2 className="w-4 h-4 text-green-500" />}
+                              {cardFieldState('number') === 'invalid' && <AlertCircle className="w-4 h-4 text-red-500" />}
+                            </div>
+                          </div>
+                          {cardFieldState('number') === 'invalid' && (
+                            <p className="text-xs text-red-400 mt-1 flex items-center gap-1">
+                              <AlertCircle className="w-3 h-3" /> {cardErrors.number}
+                            </p>
+                          )}
+                        </div>
+
+                        <div>
+                          <label htmlFor="card-name" className="block text-sm font-semibold mb-1">
+                            Nombre del titular
+                          </label>
+                          <div className="relative">
+                            <input
+                              id="card-name"
+                              type="text"
+                              autoComplete="cc-name"
+                              placeholder="Como aparece en la tarjeta"
+                              value={cardData.name}
+                              onChange={(e) => handleCardChange('name', e.target.value)}
+                              onBlur={() => setCardTouched((p) => ({ ...p, name: true }))}
+                              aria-invalid={cardFieldState('name') === 'invalid'}
+                              className={`w-full bg-groove-bg-primary border rounded-lg px-4 py-3 pr-10 focus:outline-none transition-colors ${cardBorderClass('name')}`}
+                            />
+                            <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                              {cardFieldState('name') === 'valid' && <CheckCircle2 className="w-4 h-4 text-green-500" />}
+                              {cardFieldState('name') === 'invalid' && <AlertCircle className="w-4 h-4 text-red-500" />}
+                            </div>
+                          </div>
+                          {cardFieldState('name') === 'invalid' && (
+                            <p className="text-xs text-red-400 mt-1 flex items-center gap-1">
+                              <AlertCircle className="w-3 h-3" /> {cardErrors.name}
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label htmlFor="card-expiry" className="block text-sm font-semibold mb-1">
+                              Expiración (MM/AA)
+                            </label>
+                            <div className="relative">
+                              <input
+                                id="card-expiry"
+                                type="text"
+                                inputMode="numeric"
+                                autoComplete="cc-exp"
+                                placeholder="MM/AA"
+                                value={cardData.expiry}
+                                onChange={(e) => handleCardChange('expiry', e.target.value)}
+                                onBlur={() => setCardTouched((p) => ({ ...p, expiry: true }))}
+                                aria-invalid={cardFieldState('expiry') === 'invalid'}
+                                className={`w-full bg-groove-bg-primary border rounded-lg px-4 py-3 pr-10 focus:outline-none transition-colors ${cardBorderClass('expiry')}`}
+                              />
+                              <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                                {cardFieldState('expiry') === 'valid' && <CheckCircle2 className="w-4 h-4 text-green-500" />}
+                                {cardFieldState('expiry') === 'invalid' && <AlertCircle className="w-4 h-4 text-red-500" />}
+                              </div>
+                            </div>
+                            {cardFieldState('expiry') === 'invalid' && (
+                              <p className="text-xs text-red-400 mt-1 flex items-center gap-1">
+                                <AlertCircle className="w-3 h-3" /> {cardErrors.expiry}
+                              </p>
+                            )}
+                          </div>
+
+                          <div>
+                            <label htmlFor="card-cvc" className="block text-sm font-semibold mb-1">
+                              {cardType.type === 'amex' ? 'CVV (4 dígitos)' : 'CVC/CVV'}
+                            </label>
+                            <div className="relative">
+                              <input
+                                id="card-cvc"
+                                type="text"
+                                inputMode="numeric"
+                                autoComplete="cc-csc"
+                                placeholder={cardType.type === 'amex' ? '1234' : '123'}
+                                value={cardData.cvc}
+                                onChange={(e) => handleCardChange('cvc', e.target.value)}
+                                onBlur={() => setCardTouched((p) => ({ ...p, cvc: true }))}
+                                aria-invalid={cardFieldState('cvc') === 'invalid'}
+                                className={`w-full bg-groove-bg-primary border rounded-lg px-4 py-3 pr-10 focus:outline-none transition-colors ${cardBorderClass('cvc')}`}
+                              />
+                              <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                                {cardFieldState('cvc') === 'valid' && <CheckCircle2 className="w-4 h-4 text-green-500" />}
+                                {cardFieldState('cvc') === 'invalid' && <AlertCircle className="w-4 h-4 text-red-500" />}
+                              </div>
+                            </div>
+                            {cardFieldState('cvc') === 'invalid' && (
+                              <p className="text-xs text-red-400 mt-1 flex items-center gap-1">
+                                <AlertCircle className="w-3 h-3" /> {cardErrors.cvc}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={handleCardPayment}
+                          disabled={isProcessing || !isCardValid}
+                          className="w-full bg-groove-gold text-black font-bold py-3 rounded-lg hover:bg-groove-gold-light disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+                        >
+                          {isProcessing ? '⏳ Procesando...' : <>Pagar ${(total / 100).toFixed(2)}</>}
+                        </button>
+                      </motion.div>
                     )}
                     {paymentMethod === 'paypal' && (
                       <PayPalButtons
