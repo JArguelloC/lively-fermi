@@ -17,7 +17,9 @@ interface ProductCardProps {
 export const ProductCard: React.FC<ProductCardProps> = ({ product, onAddToCart, showAddToCart = true }) => {
   // Compatibilidad con el DTO de la API (name/price/stock) y el tipo Product (title/basePrice/variants)
   const p = product as Product & { name?: string; price?: number; stock?: number };
-  const isNew = product.createdAt && new Date(product.createdAt).getTime() > Date.now() - 30 * 24 * 60 * 60 * 1000;
+  
+  // CORRECCIÓN: Se eliminó el cálculo de isNew y el badge de 'New'
+
   const productName = product.title || p.name || 'Producto';
   const rawPrice = p.price;
   const productStock = typeof p.stock === 'number'
@@ -51,7 +53,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onAddToCart, 
           {/* Badges */}
           <div className="absolute top-3 left-3 flex flex-col gap-2">
             {product.featured && <Badge variant="offer">Featured</Badge>}
-            {isNew && <Badge variant="new">New</Badge>}
+            {/* CORRECCIÓN: Se quitó el badge de 'New' */}
           </div>
 
           {productStock <= 0 ? (

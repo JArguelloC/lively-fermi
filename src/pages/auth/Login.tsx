@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Mail, Lock, User, ArrowRight, Eye, EyeOff, ShieldAlert } from 'lucide-react'
@@ -28,16 +28,22 @@ export default function Login() {
   const navigate = useNavigate()
   const location = useLocation()
   const { setUser: setAuthUser } = useAuthStore()
+
+  // Memoriza el destino de redirección para evitar recálculos al escribir en el formulario
+  const redirectTo = useMemo(() => {
+    const queryParams = new URLSearchParams(location.search)
+    return queryParams.get('redirect') || (location.state as { from?: string } | null)?.from || '/'
+  }, [location.search, location.state])
+
+  // Estados locales del componente
   const [isRegister, setIsRegister] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
-  
   const [formData, setFormData] = useState({ name: '', email: '', password: '' })
   const [errors, setErrors] = useState({ name: '', email: '', password: '', general: '' })
   const [isLoading, setIsLoading] = useState(false)
   const [forgotPassword, setForgotPassword] = useState(false)
   const [resetSent, setResetSent] = useState(false)
-  const redirectTo = (location.state as { from?: string } | null)?.from || '/'
-  
+
   const seo = (
     <SEOMeta
       title={isRegister ? 'Registro' : 'Iniciar sesión'}
@@ -311,6 +317,32 @@ export default function Login() {
               {!isLoading && <ArrowRight className="w-5 h-5" />}
             </button>
           </form>
+          
+        )}
+
+        {new URLSearchParams(useLocation().search).get('redirect') === 'checkout' && !forgotPassword && (
+          <>
+            <div className="relative flex py-6 items-center">
+              <div className="flex-grow border-t border-white/10"></div>
+              <span className="flex-shrink mx-4 text-groove-text-secondary text-xs uppercase font-bold tracking-wider">
+                ¿Prefieres rapidez?
+              </span>
+              <div className="flex-grow border-t border-white/10"></div>
+            </div>
+
+            <div className="text-center bg-groove-bg-secondary p-5 rounded-xl border border-white/5">
+              <p className="text-xs text-groove-text-secondary mb-4 leading-relaxed">
+                No necesitas crear una contraseña ahora para completar tu compra.
+              </p>
+              <button
+                type="button"
+                onClick={() => navigate('/checkout?mode=guest')}
+                className="w-full flex items-center justify-center gap-2 bg-white hover:bg-zinc-200 text-black font-bold py-3.5 rounded-xl transition-all hover:scale-[1.02]"
+              >
+                Continuar como Invitado <ArrowRight className="w-5 h-5" />
+              </button>
+            </div>
+          </>
         )}
 
         {!forgotPassword && (

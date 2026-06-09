@@ -9,7 +9,7 @@
  */
 
 import { useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { CreditCard, MapPin, Check, Lock, ArrowRight, ArrowLeft, ShoppingCart, AlertCircle, CheckCircle2 } from 'lucide-react'
 import SEOMeta from '../../components/ui/SEOMeta'
@@ -42,8 +42,10 @@ interface ShippingFormData {
 
 export default function Checkout() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { items: cartItems, totalPrice: subtotalCents, clearCart } = useCartStore()
   const { currentUser } = useAuthStore()
+  const isGuest = new URLSearchParams(location.search).get('mode') === 'guest'
   const [step, setStep] = useState(0)
   const [isProcessing, setIsProcessing] = useState(false)
   const [stockError, setStockError] = useState('')
@@ -215,13 +217,16 @@ export default function Checkout() {
   // ═══════════════════════════════════════════════════════════════
   // VALIDACIÓN DE FORMULARIO
   // ═══════════════════════════════════════════════════════════════
-  const isFormValid =
-    shippingData.name &&
-    shippingData.email &&
-    shippingData.phone &&
-    shippingData.address &&
-    shippingData.city &&
-    shippingData.province
+  const isFormValid = useMemo(() => {
+    return (
+      shippingData.name.trim().length > 0 &&
+      shippingData.email.trim().length > 0 &&
+      shippingData.phone.trim().length > 0 &&
+      shippingData.address.trim().length > 0 &&
+      shippingData.city.trim().length > 0 &&
+      shippingData.province.trim().length > 0
+    )
+  }, [shippingData])
 
   // ═══════════════════════════════════════════════════════════════
   // RENDER
@@ -319,13 +324,25 @@ export default function Checkout() {
                         onChange={(e) => setShippingData({ ...shippingData, name: e.target.value })}
                         className="w-full bg-groove-bg-primary border border-groove-gold/30 rounded-lg px-4 py-3 focus:outline-none focus:border-groove-gold"
                       />
-                      <input
-                        type="email"
-                        placeholder="Email"
-                        value={shippingData.email}
-                        onChange={(e) => setShippingData({ ...shippingData, email: e.target.value })}
-                        className="w-full bg-groove-bg-primary border border-groove-gold/30 rounded-lg px-4 py-3 focus:outline-none focus:border-groove-gold"
-                      />
+
+                      {/* Campo de Email unificado (Adaptable para Invitado o Autenticado) */}
+                      <div className="space-y-1">
+                        {isGuest && (
+                          <label className="text-xs font-bold uppercase text-groove-text-secondary block ml-1">
+                            Correo Electrónico para Notificaciones *
+                          </label>
+                        )}
+                        <input
+                          type="email"
+                          placeholder="Email"
+                          required={isGuest}
+                          value={shippingData.email}
+                          onChange={(e) => setShippingData({ ...shippingData, email: e.target.value })}
+                          disabled={!isGuest && !!currentUser}
+                          className="w-full bg-groove-bg-primary border border-groove-gold/30 rounded-lg px-4 py-3 focus:outline-none focus:border-groove-gold disabled:opacity-50 disabled:cursor-not-allowed"
+                        />
+                      </div>
+
                       <input
                         type="tel"
                         placeholder="Teléfono"
@@ -333,6 +350,7 @@ export default function Checkout() {
                         onChange={(e) => setShippingData({ ...shippingData, phone: e.target.value })}
                         className="w-full bg-groove-bg-primary border border-groove-gold/30 rounded-lg px-4 py-3 focus:outline-none focus:border-groove-gold"
                       />
+                      
                       <input
                         type="text"
                         placeholder="Dirección"
@@ -340,6 +358,7 @@ export default function Checkout() {
                         onChange={(e) => setShippingData({ ...shippingData, address: e.target.value })}
                         className="w-full bg-groove-bg-primary border border-groove-gold/30 rounded-lg px-4 py-3 focus:outline-none focus:border-groove-gold"
                       />
+                      
                       <div className="grid grid-cols-2 gap-4">
                         <input
                           type="text"
@@ -356,6 +375,7 @@ export default function Checkout() {
                           className="bg-groove-bg-primary border border-groove-gold/30 rounded-lg px-4 py-3 focus:outline-none focus:border-groove-gold"
                         />
                       </div>
+                      
                       <input
                         type="text"
                         placeholder="Provincia (Ej: Pichincha, Guayas, Manabí)"

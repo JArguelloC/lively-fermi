@@ -27,13 +27,14 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
   return (
     <section className="py-4">
       {(title || description) && (
-        <div className="mb-8">
-          {title && <h2 className="text-3xl font-bold text-white mb-2">{title}</h2>}
-          {description && <p className="text-gray-400 text-lg max-w-2xl">{description}</p>}
+        <div className="mb-6 px-1">
+          {title && <h2 className="text-2xl sm:text-3xl font-bold text-white mb-1">{title}</h2>}
+          {description && <p className="text-gray-400 text-sm sm:text-lg max-w-2xl">{description}</p>}
         </div>
       )}
       
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+      {/* CORRECCIÓN: Ahora inicia en 2 columnas en móvil por defecto, manteniendo tu escalado hacia escritorio */}
+      <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-6">
         {products.map((product) => (
           <ProductCard 
             key={product.id} 

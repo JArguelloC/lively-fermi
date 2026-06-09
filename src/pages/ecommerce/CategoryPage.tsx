@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { motion } from 'framer-motion'
-import { SlidersHorizontal, Star, Heart, X } from 'lucide-react'
-import { formatPrice } from '../../utils/formatPrice'
+import { motion, AnimatePresence } from 'framer-motion'
+import { SlidersHorizontal, Star, X } from 'lucide-react'
 import { useProducts } from '../../hooks/useProducts'
-import WebpImage from '../../components/ui/WebpImage'
+import { useCartStore } from '../../store/cartStore'
+import { useUiStore } from '../../store/uiStore'
+import { ProductCard } from '../../components/ecommerce/ProductCard'
 import SEOMeta from '../../components/ui/SEOMeta'
 
 const categoryMap: Record<string, string> = {
@@ -21,272 +22,199 @@ const sortOptions = [
   { value: 'rating', label: 'Mejor Valorados' },
 ]
 
+// FIX 3: Mínimo de scroll para considerar que es el usuario quien disparó
+const MIN_SCROLL_Y = 100
+
 export default function CategoryPage() {
   const { categoria } = useParams()
   const categoryKey = categoryMap[categoria || ''] || ''
   const [sort, setSort] = useState('featured')
   const [showFilters, setShowFilters] = useState(false)
-  const { products: allProducts } = useProducts(categoryKey || 'all')
+
+  const addItem = useCartStore(state => state.addItem)
+  const addNotification = useUiStore(state => state.addNotification)
 
   const [selectedPrices, setSelectedPrices] = useState<string[]>([])
   const [selectedGenres, setSelectedGenres] = useState<string[]>([])
   const [selectedRatings, setSelectedRatings] = useState<number[]>([])
 
+  const { products, isLoading, isLoadingMore, hasMore, loadMore } = useProducts(
+    categoryKey || 'all', 
+    8, 
+    selectedPrices, 
+    selectedGenres
+  )
+  
+  const observerRef = useRef<IntersectionObserver | null>(null)
+  const sentinelRef = useRef<HTMLDivElement | null>(null)
+
   const togglePrice = (range: string) => setSelectedPrices(prev => prev.includes(range) ? prev.filter(r => r !== range) : [...prev, range])
   const toggleGenre = (genre: string) => setSelectedGenres(prev => prev.includes(genre) ? prev.filter(g => g !== genre) : [...prev, genre])
   const toggleRating = (rating: number) => setSelectedRatings(prev => prev.includes(rating) ? prev.filter(r => r !== rating) : [...prev, rating])
 
-  let products = allProducts
+  // FIX 1 + 3: Callback de intersección con guardia de scroll y desconexión inmediata
+  const handleIntersection = useCallback((entries: IntersectionObserverEntry[]) => {
+    const entry = entries[0]
+    if (!entry.isIntersecting) return
 
-  // Apply filters
-  if (selectedPrices.length > 0) {
-    products = products.filter(p => {
-      return selectedPrices.some(range => {
-        if (range === 'Menos de $20') return p.price < 2000;
-        if (range === '$20 - $50') return p.price >= 2000 && p.price <= 5000;
-        if (range === '$50 - $100') return p.price > 5000 && p.price <= 10000;
-        if (range === 'Más de $100') return p.price > 10000;
-        return false;
-      })
+    // FIX 3: Ignorar si el scroll no es de origen humano
+    if (window.scrollY < MIN_SCROLL_Y) return
+
+    // FIX 1: Desconectar ANTES de pedir más datos — mata el bucle
+    observerRef.current?.disconnect()
+    observerRef.current = null
+
+    loadMore()
+  }, [loadMore])
+
+  useEffect(() => {
+    if (observerRef.current) observerRef.current.disconnect()
+
+    // Solo observar si hay más datos y no estamos en medio de una carga
+    if (!hasMore || isLoadingMore) return
+
+    const sentinel = sentinelRef.current
+    if (!sentinel) return
+
+    observerRef.current = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          // Desconexión inmediata al detectar el centinela
+          observerRef.current?.disconnect()
+          loadMore()
+        }
+      },
+      { rootMargin: '200px', threshold: 0.1 }
+    )
+
+    observerRef.current.observe(sentinel)
+    return () => observerRef.current?.disconnect()
+  }, [hasMore, isLoadingMore, loadMore])
+
+  const handleAddToCart = (product: any) => {
+    const productName = product.title || product.name || 'Producto'
+    addItem({
+      id: product.id,
+      productId: product.id,
+      name: productName,
+      price: product.price,
+      quantity: 1,
+      images: [product.images?.[0] || '/images/placeholder.svg'],
+    })
+    addNotification({
+      type: 'success',
+      message: `${productName} añadido al carrito`
     })
   }
 
-  if (selectedGenres.length > 0) {
-    products = products.filter(p => p.genre && selectedGenres.some(g => p.genre?.includes(g)))
-  }
-
-  if (selectedRatings.length > 0) {
-    products = products.filter(p => selectedRatings.some(r => Math.round(p.avgRating || 0) >= r))
-  }
-
-  // Sort
-  products = [...products].sort((a, b) => {
-    switch (sort) {
-      case 'price-asc': return a.price - b.price
-      case 'price-desc': return b.price - a.price
-      case 'rating': return (b.avgRating || 0) - (a.avgRating || 0)
-      case 'newest': return b.id.localeCompare(a.id)
-      default: return 0
-    }
-  })
-
   const categoryTitle = categoryKey ? categoryNames[categoryKey] : 'Toda la Tienda'
-  const categoryDesc: Record<string, string> = {
-    music: 'Descubre nuestra colección de música: discos de vinilo, CDs, vinyls edición limitada y más. Artistas clásicos y modernos con envío rápido.',
-    merch: 'Merchandising oficial de tus artistas favoritos: camisetas, gorras, accesorios y más. Productos auténticos certificados.',
-    instruments: 'Instrumentos musicales de calidad: guitarras, sintetizadores, accesorios y equipos para músicos profesionales y principiantes.',
-    offers: 'Ofertas especiales y descuentos exclusivos en toda nuestra tienda. Productos seleccionados con hasta 50% de descuento.',
-  }
 
   return (
     <>
-      <SEOMeta 
-        title={categoryTitle}
-        description={categoryDesc[categoryKey] || 'Explorar nuestro catálogo completo de música, instrumentos y merchandising.'}
-      />
-    <div className="min-h-screen max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 overflow-x-hidden">
-      {/* Header */}
-      <div className="mb-6 sm:mb-8">
-        <h1 className="text-3xl sm:text-4xl font-display font-extrabold mb-2 leading-tight">
-          {categoryKey ? categoryNames[categoryKey] : 'Toda la Tienda'}
-        </h1>
-        <p className="text-sm sm:text-base text-groove-text-secondary">{products.length} productos encontrados</p>
-      </div>
+      <SEOMeta title={categoryTitle} description="Catálogo optimizado de Groove." />
+      <div className="min-h-screen max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 overflow-x-hidden">
 
-      {/* Controls */}
-      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <button onClick={() => setShowFilters(!showFilters)}
-          className="flex w-full sm:w-auto items-center justify-center gap-2 bg-groove-bg-secondary px-5 py-2.5 rounded-full border border-white/10 text-sm font-medium hover:border-groove-gold/30 transition-colors lg:hidden">
-          <SlidersHorizontal className="w-4 h-4" /> Filtros
-        </button>
-        <select value={sort} onChange={e => setSort(e.target.value)}
-          className="w-full sm:w-auto bg-groove-bg-secondary border border-white/10 rounded-full px-5 py-2.5 text-sm focus:outline-none focus:border-groove-gold transition-colors appearance-none cursor-pointer min-w-0">
-          {sortOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
-      </div>
+        {/* Header */}
+        <div className="mb-6 sm:mb-8">
+          <h1 className="text-3xl sm:text-4xl font-display font-extrabold mb-2 leading-tight text-white">
+            {categoryTitle}
+          </h1>
+          <p className="text-sm sm:text-base text-groove-text-secondary">
+            {isLoading && products.length === 0 ? 'Cargando catálogo...' : `${products.length} productos mostrados`}
+          </p>
+        </div>
 
-      <div className="flex gap-8">
-        {/* Filter Sidebar (desktop) */}
-        <aside className="hidden lg:block w-64 flex-shrink-0">
-          <div className="sticky top-24 max-h-[calc(100vh-120px)] overflow-y-auto pr-2 space-y-6">
-            <div className="bg-groove-bg-secondary rounded-xl p-5 border border-white/5">
-              <h3 className="font-bold mb-4 text-sm uppercase tracking-wider text-groove-text-secondary">Categorías</h3>
-              <div className="space-y-2">
-                {Object.entries(categoryNames).map(([key, name]) => (
-                  <Link key={key} to={`/tienda/${Object.keys(categoryMap).find(k => categoryMap[k] === key)}`}
-                    className={`block px-3 py-2 rounded-lg text-sm transition-colors ${categoryKey === key ? 'bg-groove-gold/10 text-groove-gold font-medium' : 'text-groove-text-secondary hover:text-white hover:bg-white/5'}`}>
-                    {name}
-                  </Link>
-                ))}
-              </div>
-            </div>
-            <div className="bg-groove-bg-secondary rounded-xl p-5 border border-white/5">
-              <h3 className="font-bold mb-4 text-sm uppercase tracking-wider text-groove-text-secondary">Precio</h3>
-              <div className="space-y-2 text-sm">
-                {['Menos de $20', '$20 - $50', '$50 - $100', 'Más de $100'].map(range => (
-                  <label key={range} className="flex items-center gap-2 text-groove-text-secondary hover:text-white cursor-pointer">
-                    <input type="checkbox" className="accent-groove-gold rounded" checked={selectedPrices.includes(range)} onChange={() => togglePrice(range)} /> {range}
-                  </label>
-                ))}
-              </div>
-            </div>
-            {categoryKey === 'music' && (
+        {/* Controls */}
+        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className="flex w-full sm:w-auto items-center justify-center gap-2 bg-groove-bg-secondary px-5 py-2.5 rounded-full border border-white/10 text-sm font-medium hover:border-groove-gold/30 text-white lg:hidden"
+          >
+            <SlidersHorizontal className="w-4 h-4" /> Filtros
+          </button>
+          <select
+            value={sort}
+            onChange={e => setSort(e.target.value)}
+            className="w-full sm:w-auto bg-groove-bg-secondary border border-white/10 rounded-full px-5 py-2.5 text-sm text-white focus:outline-none focus:border-groove-gold cursor-pointer"
+          >
+            {sortOptions.map(o => (
+              <option key={o.value} value={o.value} className="bg-groove-bg-secondary">{o.label}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex gap-8">
+          {/* Sidebar Escritorio */}
+          <aside className="hidden lg:block w-64 flex-shrink-0">
+            <div className="sticky top-24 space-y-6">
               <div className="bg-groove-bg-secondary rounded-xl p-5 border border-white/5">
-                <h3 className="font-bold mb-4 text-sm uppercase tracking-wider text-groove-text-secondary">Género</h3>
-                <div className="space-y-2 text-sm">
-                  {['Rock', 'Jazz', 'Electronic', 'Pop', 'Hip-Hop', 'Classical', 'Metal', 'Indie'].map(g => (
-                    <label key={g} className="flex items-center gap-2 text-groove-text-secondary hover:text-white cursor-pointer">
-                      <input type="checkbox" className="accent-groove-gold rounded" checked={selectedGenres.includes(g)} onChange={() => toggleGenre(g)} /> {g}
+                <h3 className="font-bold mb-4 text-sm uppercase tracking-wider text-groove-text-secondary">Precio</h3>
+                <div className="space-y-2 text-sm text-groove-text-secondary">
+                  {['Menos de $20', '$20 - $50', '$50 - $100', 'Más de $100'].map(range => (
+                    <label key={range} className="flex items-center gap-2 hover:text-white cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="accent-groove-gold rounded"
+                        checked={selectedPrices.includes(range)}
+                        onChange={() => togglePrice(range)}
+                      /> {range}
                     </label>
                   ))}
                 </div>
               </div>
-            )}
-            <div className="bg-groove-bg-secondary rounded-xl p-5 border border-white/5">
-              <h3 className="font-bold mb-4 text-sm uppercase tracking-wider text-groove-text-secondary">Calificación</h3>
-              <div className="space-y-2 text-sm">
-                {[4, 3, 2].map(s => (
-                  <label key={s} className="flex items-center gap-2 text-groove-text-secondary hover:text-white cursor-pointer">
-                    <input type="checkbox" className="accent-groove-gold rounded" checked={selectedRatings.includes(s)} onChange={() => toggleRating(s)} />
-                    <span className="flex items-center gap-0.5">{[1,2,3,4,5].map(i => <Star key={i} className={`w-3 h-3 ${i <= s ? 'fill-groove-gold text-groove-gold' : 'text-gray-600'}`} />)}</span>
-                    <span>y más</span>
-                  </label>
+            </div>
+          </aside>
+
+          {/* Grid de Productos */}
+          <div className="flex-1">
+            {isLoading && products.length === 0 ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6">
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className="animate-pulse bg-groove-bg-secondary rounded-2xl aspect-[3/4] border border-white/5" />
                 ))}
               </div>
-            </div>
-          </div>
-        </aside>
-
-        {/* Mobile Filter Drawer */}
-        {showFilters && (
-          <div className="fixed inset-0 z-50 lg:hidden">
-            <div className="absolute inset-0 bg-black/60" onClick={() => setShowFilters(false)} />
-            <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
-              className="absolute bottom-0 left-0 right-0 bg-groove-bg-secondary rounded-t-2xl p-6 max-h-[80vh] overflow-y-auto">
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="font-bold text-lg">Filtros</h3>
-                <button onClick={() => setShowFilters(false)} aria-label="Cerrar filtros" className="p-2 rounded-full hover:bg-white/5 transition-colors">
-                  <X className="w-6 h-6" />
-                </button>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6">
+                {products.map((product) => (
+                  <motion.div key={product.id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="h-full">
+                    <ProductCard product={product as any} onAddToCart={handleAddToCart} />
+                  </motion.div>
+                ))}
               </div>
+            )}
 
-              {/* Replicar contenido del sidebar para móviles (controles interactivos) */}
-              <div className="space-y-6">
-                <div className="bg-groove-bg-secondary rounded-xl p-4 border border-white/5">
-                  <h4 className="font-bold mb-3 text-sm uppercase tracking-wider text-groove-text-secondary">Categorías</h4>
-                  <div className="space-y-2">
-                    {Object.entries(categoryNames).map(([key, name]) => (
-                      <Link key={key} to={`/tienda/${Object.keys(categoryMap).find(k => categoryMap[k] === key)}`}
-                        onClick={() => setShowFilters(false)}
-                        className={`block px-3 py-2 rounded-lg text-sm transition-colors ${categoryKey === key ? 'bg-groove-gold/10 text-groove-gold font-medium' : 'text-groove-text-secondary hover:text-white hover:bg-white/5'}`}>
-                        {name}
-                      </Link>
-                    ))}
-                  </div>
+            {/* Paginación */}
+            {hasMore && products.length > 0 && (
+              <div className="mt-8">
+                {/* Escritorio: botón manual */}
+                <div className="hidden md:flex justify-center">
+                  <button
+                    onClick={loadMore}
+                    disabled={isLoadingMore}
+                    className="px-8 py-2.5 rounded-full font-bold border-2 border-groove-gold text-groove-gold hover:bg-groove-gold hover:text-black transition-all disabled:opacity-50"
+                  >
+                    {isLoadingMore ? 'Cargando...' : 'Cargar más'}
+                  </button>
                 </div>
 
-                <div className="bg-groove-bg-secondary rounded-xl p-4 border border-white/5">
-                  <h4 className="font-bold mb-3 text-sm uppercase tracking-wider text-groove-text-secondary">Precio</h4>
-                  <div className="space-y-2 text-sm">
-                    {['Menos de $20', '$20 - $50', '$50 - $100', 'Más de $100'].map(range => (
-                      <label key={range} className="flex items-center gap-2 text-groove-text-secondary hover:text-white cursor-pointer">
-                        <input type="checkbox" className="accent-groove-gold rounded" checked={selectedPrices.includes(range)} onChange={() => togglePrice(range)} /> {range}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-
-                {categoryKey === 'music' && (
-                  <div className="bg-groove-bg-secondary rounded-xl p-4 border border-white/5">
-                    <h4 className="font-bold mb-3 text-sm uppercase tracking-wider text-groove-text-secondary">Género</h4>
-                    <div className="space-y-2 text-sm">
-                      {['Rock', 'Jazz', 'Electronic', 'Pop', 'Hip-Hop', 'Classical', 'Metal', 'Indie'].map(g => (
-                        <label key={g} className="flex items-center gap-2 text-groove-text-secondary hover:text-white cursor-pointer">
-                          <input type="checkbox" className="accent-groove-gold rounded" checked={selectedGenres.includes(g)} onChange={() => toggleGenre(g)} /> {g}
-                        </label>
-                      ))}
+                {/* Móvil: sentinel con altura fija, fuera del grid de imágenes */}
+                <div className="block md:hidden">
+                  <div
+                    ref={sentinelRef}
+                    style={{ height: '1px', width: '100%', marginTop: '48px' }}
+                    aria-hidden="true"
+                  />
+                  {isLoadingMore && (
+                    <div className="flex items-center justify-center py-4">
+                      <div className="w-6 h-6 border-2 border-groove-gold border-t-transparent rounded-full animate-spin" />
                     </div>
-                  </div>
-                )}
-
-                <div className="bg-groove-bg-secondary rounded-xl p-4 border border-white/5">
-                  <h4 className="font-bold mb-3 text-sm uppercase tracking-wider text-groove-text-secondary">Calificación</h4>
-                  <div className="space-y-2 text-sm">
-                    {[4, 3, 2].map(s => (
-                      <label key={s} className="flex items-center gap-2 text-groove-text-secondary hover:text-white cursor-pointer">
-                        <input type="checkbox" className="accent-groove-gold rounded" checked={selectedRatings.includes(s)} onChange={() => toggleRating(s)} />
-                        <span className="flex items-center gap-0.5">{[1,2,3,4,5].map(i => <Star key={i} className={`w-3 h-3 ${i <= s ? 'fill-groove-gold text-groove-gold' : 'text-gray-600'}`} />)}</span>
-                        <span>y más</span>
-                      </label>
-                    ))}
-                  </div>
+                  )}
                 </div>
               </div>
-            </motion.div>
+            )}
           </div>
-        )}
-
-        {/* Product Grid */}
-        <div className="flex-1">
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
-            {products.map((product, i) => (
-              <motion.div key={product.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
-                <Link to={`/producto/${product.slug}`}
-                  className="group block bg-groove-bg-secondary rounded-2xl overflow-hidden border border-white/5 hover:border-groove-gold/20 transition-all hover:-translate-y-1">
-                  <div className="relative aspect-square overflow-hidden">
-                    <WebpImage
-                      src={product.images?.[0] || '/images/placeholder.svg'}
-                      alt={product.name}
-                      width={400}
-                      height={400}
-                      sizes="(max-width: 640px) 100vw, 400px"
-                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                      loading="lazy"
-                      onError={(e) => {
-                        const img = e.target as HTMLImageElement;
-                        img.src = '/images/placeholder.svg';
-                      }}
-                    />
-                    {product.isOnOffer && product.compareAtPrice && (
-                      <span className="absolute top-3 left-3 bg-red-600 text-white text-xs font-bold px-2 py-1 rounded-full">
-                        -{Math.round((1 - product.price / product.compareAtPrice) * 100)}%
-                      </span>
-                    )}
-                    {product.stock <= 0 ? (
-                      <span className="absolute top-3 right-3 bg-red-600 text-white text-xs font-bold px-2 py-1 rounded-full">Sin stock</span>
-                    ) : product.stock <= 5 ? (
-                      <span className="absolute top-3 right-3 bg-amber-600 text-white text-xs font-bold px-2 py-1 rounded-full">Poco stock</span>
-                    ) : null}
-
-                    <button onClick={(e) => { e.preventDefault(); e.stopPropagation() }}
-                      className="absolute top-3 right-3 p-2 bg-black/40 backdrop-blur-sm rounded-full text-white hover:text-groove-gold opacity-0 group-hover:opacity-100 transition-all">
-                      <Heart className="w-4 h-4" />
-                    </button>
-                  </div>
-                  <div className="p-4">
-                    <p className="text-xs text-groove-text-secondary mb-1">{product.artist || product.brand}</p>
-                    <h4 className="font-semibold text-sm leading-tight mb-2 line-clamp-2 group-hover:text-groove-gold transition-colors">{product.name}</h4>
-                    <div className="flex items-center gap-1 mb-2">
-                      {[1,2,3,4,5].map(s => <Star key={s} className={`w-3 h-3 ${s <= Math.round(product.avgRating || 0) ? 'fill-groove-gold text-groove-gold' : 'text-gray-600'}`} />)}
-                      <span className="text-xs text-groove-text-secondary ml-1">({product.reviewCount || 0})</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-groove-gold font-bold">{formatPrice(product.price)}</span>
-                      {product.compareAtPrice && <span className="text-groove-text-secondary text-xs line-through">{formatPrice(product.compareAtPrice)}</span>}
-                    </div>
-                  </div>
-                </Link>
-              </motion.div>
-            ))}
-          </div>
-          {products.length === 0 && (
-            <div className="text-center py-20 text-groove-text-secondary">
-              <p className="text-lg">No se encontraron productos en esta categoría.</p>
-            </div>
-          )}
         </div>
       </div>
-    </div>
     </>
   )
 }

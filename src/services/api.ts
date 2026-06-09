@@ -42,10 +42,28 @@ interface ApiProductResponse {
   producto: MockProduct
 }
 
-export async function getProducts(category?: string): Promise<MockProduct[]> {
-  const qs = category && category !== 'all' ? `?categoria=${encodeURIComponent(category)}` : ''
-  const data = await apiFetch<ApiProductsResponse>(`/productos${qs}`)
-  return data.productos
+export async function getProducts(
+  category?: string,
+  page = 1,
+  limit = 8,
+  prices: string[] = [],
+  genres: string[] = []
+): Promise<MockProduct[]> {
+  const params = new URLSearchParams()
+
+  if (category && category !== 'all' && category !== 'todos') {
+    params.append('categoria', category)
+  }
+  
+  // Agregar filtros como arrays serializados
+  if (prices.length > 0) params.append('precios', prices.join(','))
+  if (genres.length > 0) params.append('generos', genres.join(','))
+  
+  params.append('pagina', String(page))
+  params.append('limite', String(limit))
+
+  const data = await apiFetch<ApiProductsResponse>(`/productos?${params.toString()}`)
+  return data.productos ?? []
 }
 
 export async function getProductBySlug(slug: string): Promise<MockProduct> {
