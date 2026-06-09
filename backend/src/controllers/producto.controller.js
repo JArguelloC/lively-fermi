@@ -4,10 +4,10 @@ import { mapProducto } from '../lib/mappers.js';
 
 const incluirVariantes = { variantes: true };
 
-// GET /api/v1/productos?categoria=&destacado=&busqueda=
+// GET /api/v1/productos?categoria=&destacado=&busqueda=&precios=&generos=
 export async function listarProductos(req, res, next) {
   try {
-    const { categoria, destacado, busqueda, pagina, limite } = req.query;
+    const { categoria, destacado, busqueda, precios, generos, pagina, limite } = req.query;
     const where = { activo: true };
 
     if (categoria && categoria !== 'all' && categoria !== 'todos') {
@@ -22,6 +22,43 @@ export async function listarProductos(req, res, next) {
         { artista: { contains: String(busqueda), mode: 'insensitive' } },
         { album: { contains: String(busqueda), mode: 'insensitive' } },
       ];
+    }
+
+    // FILTRO DE PRECIOS (en centavos: 1299 = $12.99)
+    if (precios) {
+      const rangosPrecio = typeof precios === 'string' ? precios.split(',') : precios;
+      const condicionesPrecio = [];
+
+      rangosPrecio.forEach(rango => {
+        rango = rango.trim();
+        if (rango === 'Menos de $20') {
+          condicionesPrecio.push({ precioBase: { lt: 2000 } });
+        } else if (rango === '$20 - $50') {
+          condicionesPrecio.push({ AND: [{ precioBase: { gte: 2000 } }, { precioBase: { lt: 5000 } }] });
+        } else if (rango === '$50 - $100') {
+          condicionesPrecio.push({ AND: [{ precioBase: { gte: 5000 } }, { precioBase: { lt: 10000 } }] });
+        } else if (rango === 'Más de $100') {
+          condicionesPrecio.push({ precioBase: { gte: 10000 } });
+        }
+      });
+
+      if (condicionesPrecio.length > 0) {
+        // Si ya hay un OR por búsqueda, combinamos con AND
+        if (where.OR) {
+          where.AND = [{ OR: where.OR }, { OR: condicionesPrecio }];
+          delete where.OR;
+        } else {
+          where.OR = condicionesPrecio;
+        }
+      }
+    }
+
+    // FILTRO DE GÉNEROS
+    if (generos) {
+      const generosArray = typeof generos === 'string' ? generos.split(',') : generos;
+      if (generosArray.length > 0) {
+        where.genero = { hasSome: generosArray.map(g => g.trim()) };
+      }
     }
 
     // Configuración base de la consulta

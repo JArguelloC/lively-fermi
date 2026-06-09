@@ -1,58 +1,65 @@
-import React from 'react'
-import { buildResponsiveSrcSet, isLocalImagePath, RESPONSIVE_IMAGE_WIDTHS } from '../../utils/responsiveImages'
+import React, { useRef, useEffect, useState } from 'react'
 
 type WebpImageProps = React.ImgHTMLAttributes<HTMLImageElement> & {
   src: string
   fallbackSrc?: string
-  responsiveWidths?: number[]
 }
 
 export default function WebpImage({
   src,
-  fallbackSrc = src,
+  fallbackSrc,
   alt,
-  loading = 'lazy',
-  decoding = 'async',
-  onError,
-  sizes,
-  responsiveWidths = RESPONSIVE_IMAGE_WIDTHS,
+  loading = 'eager',
   ...props
 }: WebpImageProps) {
-  const handleError = (event: React.SyntheticEvent<HTMLImageElement>) => {
-    event.currentTarget.src = fallbackSrc
-    onError?.(event)
+  const imgRef = useRef<HTMLImageElement>(null)
+  const [displaySrc, setDisplaySrc] = useState<string>(src)
+  const [hasError, setHasError] = useState(false)
+
+  // Auto-generar fallback de jpg si src es webp
+  const autoFallback = src.endsWith('.webp') ? src.replace(/\.webp$/i, '.jpg') : src
+  const finalFallback = fallbackSrc || autoFallback
+
+  const handleError = () => {
+    // Si falla y aún no hemos intentado fallback, usarlo
+    if (!hasError) {
+      setDisplaySrc(finalFallback)
+      setHasError(true)
+    }
   }
 
-  const responsiveSrcSet = isLocalImagePath(src)
-    ? buildResponsiveSrcSet(src, responsiveWidths)
-    : undefined
+  // Intersection Observer solo para imágenes con loading='lazy'
+  useEffect(() => {
+    if (loading === 'eager' || !imgRef.current) return
 
-  if (!responsiveSrcSet) {
-    return (
-      <img
-        src={src}
-        alt={alt}
-        loading={loading}
-        decoding={decoding}
-        onError={handleError}
-        sizes={sizes}
-        {...props}
-      />
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setDisplaySrc(src)
+          observer.disconnect()
+        }
+      },
+      { rootMargin: '100px', threshold: 0 }
     )
-  }
+
+    observer.observe(imgRef.current)
+    return () => observer.disconnect()
+  }, [src, loading])
+
+  // Filtrar props no válidas
+  const { className, style, width, height, sizes, ...validProps } = props
 
   return (
-    <picture>
-      <source srcSet={responsiveSrcSet} sizes={sizes} type="image/webp" />
-      <img
-        src={fallbackSrc}
-        alt={alt}
-        loading={loading}
-        decoding={decoding}
-        onError={handleError}
-        sizes={sizes}
-        {...props}
-      />
-    </picture>
+    <img
+      ref={imgRef}
+      src={displaySrc}
+      alt={alt}
+      loading={loading === 'lazy' ? 'lazy' : 'eager'}
+      decoding="async"
+      onError={handleError}
+      className={className}
+      style={style}
+      {...validProps}
+    />
   )
 }

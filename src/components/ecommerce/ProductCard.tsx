@@ -39,7 +39,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onAddToCart, 
     <Link to={`/producto/${product.slug}`}>
       <Card className="group flex flex-col h-full bg-gray-900 border-gray-800 transition-all duration-300 hover:border-yellow-500/50 hover:shadow-xl hover:-translate-y-1">
         {/* Image Container */}
-        <div className="relative aspect-square sm:aspect-[4/3] overflow-hidden bg-gray-800">
+        <div className="relative aspect-[4/5] sm:aspect-[4/4] lg:aspect-square overflow-hidden bg-gray-800">
           <WebpImage 
             src={product.images?.[0] || '/images/placeholder.svg'} 
             alt={productName}
@@ -47,7 +47,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onAddToCart, 
             height={400}
             sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
             className="object-cover w-full h-full transition-transform duration-700 group-hover:scale-110"
-            loading="lazy"
+            loading="eager"
           />
           
           {/* Badges */}

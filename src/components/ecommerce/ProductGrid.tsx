@@ -33,8 +33,8 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
         </div>
       )}
       
-      {/* CORRECCIÓN: Ahora inicia en 2 columnas en móvil por defecto, manteniendo tu escalado hacia escritorio */}
-      <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-6">
+      {/* CORRECCIÓN: Responsive grid - 2 cols móvil, escalado a escritorio */}
+      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-3 md:gap-6">
         {products.map((product) => (
           <ProductCard 
             key={product.id} 

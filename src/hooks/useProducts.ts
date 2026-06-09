@@ -1,4 +1,3 @@
-// src/hooks/useProducts.ts
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { getProducts } from '../services/api'
 import { mockProducts, type MockProduct } from '../data/mockData'
@@ -36,7 +35,7 @@ export function useProducts(
   }, [category, prices, genres])
 
   const fetchPage = useCallback(async (pageToFetch: number) => {
-    // CORRECCIÓN: Comparamos el valor del estado, no la función setter
+    // Si ya estamos cargando más, no duplicar petición
     if (pageToFetch > 1 && isLoadingMore) return; 
 
     abortRef.current?.abort()
@@ -47,15 +46,12 @@ export function useProducts(
 
     try {
       const items = await getProducts(category, pageToFetch, itemsPerPage, prices, genres)
-      
       setProducts(prev => pageToFetch === 1 ? items : [...prev, ...items])
       setHasMore(items.length >= itemsPerPage)
     } catch (err: any) {
       if (err?.name === 'AbortError') return 
-
       console.warn('Backend offline, usando mock:', err)
       const { items: mockItems, total } = filterMock(category, pageToFetch, itemsPerPage, prices, genres)
-      
       setProducts(prev => pageToFetch === 1 ? mockItems : [...prev, ...mockItems])
       const totalLoaded = (pageToFetch - 1) * itemsPerPage + mockItems.length
       setHasMore(totalLoaded < total)
@@ -64,7 +60,7 @@ export function useProducts(
       setIsLoading(false)
       setIsLoadingMore(false)
     }
-  }, [category, itemsPerPage, prices, genres, isLoadingMore]) // Añadí isLoadingMore a dependencias por seguridad
+  }, [category, itemsPerPage, prices, genres])
 
   useEffect(() => {
     fetchPage(page)
@@ -76,12 +72,5 @@ export function useProducts(
     }
   }, [isLoading, isLoadingMore, hasMore])
 
-  return { 
-  products, 
-  isLoading, 
-  isLoadingMore, // Asegúrate de que esto esté aquí
-  hasMore, 
-  loadMore, 
-  error 
-  } as const;
+  return { products, isLoading, isLoadingMore, hasMore, loadMore, error } as const
 }
