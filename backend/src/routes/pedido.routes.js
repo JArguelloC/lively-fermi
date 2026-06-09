@@ -5,12 +5,17 @@ import {
   listarMisPedidos,
   obtenerPedido,
 } from '../controllers/pedido.controller.js';
-import { verificarToken } from '../middleware/auth.js';
+import { verificarToken, verificarTokenOpcional } from '../middleware/auth.js';
 
 const router = Router();
 
-router.post('/', verificarToken, crearPedido);
+// Permite crear pedidos a Invitados y a Usuarios Registrados
+router.post('/', verificarTokenOpcional, crearPedido);
+
+// Obligatorio: Solo usuarios autenticados pueden ver SU historial completo de pedidos
 router.get('/', verificarToken, listarMisPedidos);
-router.get('/:id', verificarToken, obtenerPedido);
+
+// Opcional: Permite a los invitados ver su pantalla de éxito usando el ID del pedido
+router.get('/:id', verificarTokenOpcional, obtenerPedido); // <-- CAMBIADO A OPCIONAL
 
 export default router;

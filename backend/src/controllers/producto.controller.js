@@ -7,7 +7,7 @@ const incluirVariantes = { variantes: true };
 // GET /api/v1/productos?categoria=&destacado=&busqueda=
 export async function listarProductos(req, res, next) {
   try {
-    const { categoria, destacado, busqueda } = req.query;
+    const { categoria, destacado, busqueda, pagina, limite } = req.query;
     const where = { activo: true };
 
     if (categoria && categoria !== 'all' && categoria !== 'todos') {
@@ -24,11 +24,25 @@ export async function listarProductos(req, res, next) {
       ];
     }
 
-    const productos = await prisma.producto.findMany({
+    // Configuración base de la consulta
+    const opcionesConsulta = {
       where,
       include: incluirVariantes,
       orderBy: { creadoEn: 'desc' },
-    });
+    };
+
+    // Si el frontend pide paginación, la aplicamos. Si no, limitamos a 24 por seguridad.
+    if (pagina || limite) {
+      const numeroPagina = parseInt(pagina) || 1;
+      const limiteProductos = parseInt(limite) || 12; // 12 es ideal para grillas de 3 o 4 columnas
+      
+      opcionesConsulta.take = limiteProductos;
+      opcionesConsulta.skip = (numeroPagina - 1) * limiteProductos;
+    } else {
+      opcionesConsulta.take = 24; // Evita traer miles de registros de golpe
+    }
+
+    const productos = await prisma.producto.findMany(opcionesConsulta);
 
     return res.json({ productos: productos.map(mapProducto) });
   } catch (err) {

@@ -14,7 +14,7 @@ const METODOS = {
   efectivo: 'efectivo',
 };
 
-// POST /api/v1/pedidos  (auth)
+// POST /api/v1/pedidos  (Permite Invitados y Usuarios Autenticados)
 export async function crearPedido(req, res, next) {
   try {
     const { items, shipping, paymentMethod, paymentIntentId } = req.body ?? {};
@@ -27,76 +27,84 @@ export async function crearPedido(req, res, next) {
     }
 
     const metodoPago = METODOS[paymentMethod] ?? 'tarjeta';
+    
+    // Si req.usuario existe (inyectado por verificarTokenOpcional), tomamos su id; si no, es null (Invitado)
+    const idUsuario = req.usuario ? req.usuario.id : null;
 
+    // AÑADIMOS LA CONFIGURACIÓN DE TIMEOUT AL FINAL DE LA TRANSACCIÓN
     const pedido = await prisma.$transaction(async (tx) => {
       let subtotal = 0;
       const articulos = [];
 
       for (const item of items) {
-        const cantidad = Number(item.quantity ?? item.cantidad ?? 0);
-        if (!cantidad || cantidad < 1) {
-          throw Object.assign(new Error('Cantidad inválida en un artículo'), { status: 400 });
+        // 1. Buscar el Producto según el modelo 'Producto'
+        const prod = await tx.producto.findUnique({
+          where: { id: item.productId },
+        });
+        if (!prod) {
+          const err = new Error(`El producto con ID ${item.productId} no existe`);
+          err.status = 404;
+          throw err;
         }
 
-        // Resolver variante: por id explícito o la primera del producto
-        let variante = null;
-        if (item.variantId) {
-          variante = await tx.varianteProducto.findUnique({
-            where: { id: item.variantId },
-            include: { producto: true },
-          });
-        } else if (item.productId) {
-          variante = await tx.varianteProducto.findFirst({
-            where: { idProducto: item.productId },
-            include: { producto: true },
-          });
-        }
-
+        // 2. Buscar la Variante según el modelo 'VarianteProducto'
+        const variante = await tx.varianteProducto.findUnique({
+          where: { id: item.variantId },
+        });
         if (!variante) {
-          throw Object.assign(new Error(`Producto no disponible: ${item.name ?? item.productId}`), {
-            status: 400,
-          });
-        }
-        if (variante.stock < cantidad) {
-          throw Object.assign(
-            new Error(`Stock insuficiente para "${variante.producto.titulo}". Disponibles: ${variante.stock}`),
-            { status: 409 }
-          );
+          const err = new Error(`La variante con ID ${item.variantId} no existe`);
+          err.status = 404;
+          throw err;
         }
 
+        // 3. Validar relación lógica
+        if (variante.idProducto !== prod.id) {
+          const err = new Error(`La variante no corresponde al producto`);
+          err.status = 400;
+          throw err;
+        }
+
+        // 4. Verificar disponibilidad utilizando 'stock'
+        if (variante.stock < item.quantity) {
+          const err = new Error(`Stock insuficiente para ${prod.titulo} (${variante.nombre})`);
+          err.status = 400;
+          throw err;
+        }
+
+        // 5. Decrementar el stock de la variante de forma atómica
         await tx.varianteProducto.update({
-          where: { id: variante.id },
-          data: { stock: { decrement: cantidad } },
+          where: { id: item.variantId },
+          data: { stock: { decrement: item.quantity } },
         });
 
-        const precio = Number(variante.precio);
-        subtotal += precio * cantidad;
+        // 6. Calcular precio en centavos usando 'precioBase'
+        const precioCentavos = Math.round(Number(prod.precioBase) * 100);
+        subtotal += precioCentavos * item.quantity;
+
+        // Estructura de guardado
         articulos.push({
-          idProducto: variante.idProducto,
+          idProducto: prod.id,
           idVariante: variante.id,
-          titulo: variante.producto.titulo,
+          cantidad: item.quantity,
+          precio: precioCentavos, 
+          titulo: prod.titulo,
           sku: variante.sku,
-          precio,
-          cantidad,
-          imagenUrl: variante.producto.imagenes?.[0] ?? null,
         });
       }
 
-      const costoEnvio = subtotal > ENVIO_GRATIS_DESDE ? 0 : COSTO_ENVIO;
-      const impuesto = 0;
-      const total = subtotal + costoEnvio + impuesto;
+      const envio = subtotal > ENVIO_GRATIS_DESDE ? 0 : COSTO_ENVIO;
+      const total = subtotal + envio;
 
-      return tx.pedido.create({
+      // 7. Registrar la cabecera del pedido
+      return await tx.pedido.create({
         data: {
-          idUsuario: req.usuario.id,
-          estado: 'pagado',
-          subtotal,
-          impuesto,
-          costoEnvio,
-          total,
+          idUsuario: idUsuario, 
+          subtotal: subtotal,
+          costoEnvio: envio, 
+          total: total,
           envioNombre: shipping.fullName,
-          envioLinea1: shipping.addressLine1,
-          envioLinea2: shipping.addressLine2 ?? null,
+          envioLinea1: shipping.addressLine1, 
+          envioLinea2: shipping.addressLine2 ?? null, 
           envioCiudad: shipping.city,
           envioEstado: shipping.state ?? '',
           envioCodigoPostal: shipping.postalCode ?? '',
@@ -107,7 +115,10 @@ export async function crearPedido(req, res, next) {
         },
         include: { articulos: true },
       });
-    });
+    }, {
+      maxWait: 5000,  // Espera hasta 5 segundos para conectar
+      timeout: 15000  // Da hasta 15 segundos para procesar toda la transacción
+    }); // <-- AQUÍ SE APLICÓ LA SOLUCIÓN
 
     return res.status(201).json({ pedido: mapPedido(pedido) });
   } catch (err) {
@@ -118,7 +129,7 @@ export async function crearPedido(req, res, next) {
   }
 }
 
-// GET /api/v1/pedidos  (auth) -> pedidos del usuario
+// GET /api/v1/pedidos (Requiere autenticación estricta para el historial de un usuario)
 export async function listarMisPedidos(req, res, next) {
   try {
     const pedidos = await prisma.pedido.findMany({
@@ -132,16 +143,22 @@ export async function listarMisPedidos(req, res, next) {
   }
 }
 
-// GET /api/v1/pedidos/:id  (auth)
+// GET /api/v1/pedidos/:id (Protección de rutas de órdenes)
 export async function obtenerPedido(req, res, next) {
   try {
     const pedido = await prisma.pedido.findUnique({
       where: { id: req.params.id },
       include: { articulos: true },
     });
-    if (!pedido || pedido.idUsuario !== req.usuario.id) {
+
+    if (!pedido) {
       return res.status(404).json({ message: 'Pedido no encontrado' });
     }
+
+    if (pedido.idUsuario && (!req.usuario || pedido.idUsuario !== req.usuario.id)) {
+      return res.status(403).json({ message: 'No tienes permisos para ver este pedido' });
+    }
+
     return res.json({ pedido: mapPedido(pedido) });
   } catch (err) {
     next(err);
